@@ -26,7 +26,7 @@ ARG VERSION=0.1.0
 
 LABEL org.opencontainers.image.title="freight-platform-backend" \
       org.opencontainers.image.description="Multi-tenant freight platform API and durable workers" \
-      org.opencontainers.image.source="https://github.com/appolon1908-hue/transportation-backend-" \
+      org.opencontainers.image.source="https://github.com/appolon1908-hue/freight-platform-backend" \
       org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.version="${VERSION}"
