@@ -1,15 +1,24 @@
 # Repository identity
 
-| Purpose | Canonical identity | Current GitHub legacy alias |
-|---|---|---|
-| Backend source/package/service/image | `freight-platform-backend` | `appolon1908-hue/transportation-backend-` |
+| Purpose | Canonical coordinate |
+|---|---|
+| GitHub source | `appolon1908-hue/freight-platform-backend` |
+| Repository ID | `1343761943` |
+| Owner ID | `275410064` |
+| Python package and service | `freight-platform-backend` |
+| Container image | `ghcr.io/appolon1908-hue/freight-platform-backend` |
 
-The canonical identity is used by the Python package, FastAPI version metadata, container service names, image names and deployment configuration. The legacy GitHub name remains only because repository rename is an administrative GitHub operation outside this implementation branch.
+`app/repository_identity.py` defines canonical coordinates and the CI publication
+identity gate. Orbit adoption, runtime manifests and the release Dockerfile use
+these coordinates. API contract discovery exposes the canonical repository and
+stable repository ID; this describes source ownership, not a deployment status.
 
-Rename acceptance criteria:
+**The code change does not itself rename GitHub.** At the issue #4 baseline,
+the physical repository is still `appolon1908-hue/transportation-backend-`.
+Read-only CI can validate this patch before the administrative change. Image
+publication requires the actual GitHub name AND both immutable IDs to match.
+Delivery evidence retains the observed GitHub repository separately from the
+canonical target; earlier evidence and signed artifacts are not rewritten.
 
-1. Rename the physical GitHub repository to `freight-platform-backend`.
-2. Preserve GitHub redirect behavior for the old URL.
-3. Update local remotes, branch protection, environments, Actions variables, deploy keys and external build hooks.
-4. Confirm CI, package metadata and production image names still use `freight-platform-backend`.
-5. Do not rename or merge implementation branches solely to perform this administrative change.
+See [the rename runbook](REPOSITORY_RENAME.md) for the owner operation, consumer
+inventory, OIDC review, explicit remote updates and complete acceptance gates.
