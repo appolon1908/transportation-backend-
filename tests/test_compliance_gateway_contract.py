@@ -19,7 +19,7 @@ def test_identifier_hash_is_normalized_and_peppered(monkeypatch) -> None:
     assert len(first) == 64
 
     monkeypatch.setenv("COMPLIANCE_IDENTIFIER_PEPPER", "pepper-two")
-    assert hash_identifier("mc1234") != first
+    assert hash_identifier("MC1234") != first
 
 
 def test_production_identifier_hash_requires_pepper(monkeypatch) -> None:
@@ -95,10 +95,18 @@ def test_caddy_is_the_only_public_gateway_and_limits_bodies() -> None:
 
 
 def test_backend_entrypoint_migrates_one_canonical_chain_before_compliance() -> None:
+    from app.schema_upgrade import upgrade_plan
+
     entrypoint = (ROOT / "deploy/backend/entrypoint-v4.sh").read_text()
-    core = entrypoint.index("alembic upgrade head")
-    compliance = entrypoint.index("alembic -c alembic-compliance.ini upgrade head")
-    assert core < compliance
+    migrate_mode = entrypoint.split("  migrate)", 1)[1].split("  api)", 1)[0]
+    api_mode = entrypoint.split("  api)", 1)[1].split("  worker)", 1)[0]
+    assert "python -m app.schema_upgrade" in migrate_mode
+    assert "schema_upgrade" not in api_mode
+    assert upgrade_plan((), ()) == (
+        ("alembic.ini", "0005_portal_workflows"),
+        ("alembic-compliance.ini", "head"),
+        ("alembic.ini", "head"),
+    )
     assert "alembic-integrations.ini" not in entrypoint
     assert "app.production_v4:app" in entrypoint
     assert "workers.integration_worker" in entrypoint

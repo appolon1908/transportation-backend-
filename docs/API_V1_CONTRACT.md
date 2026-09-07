@@ -7,7 +7,7 @@
 ```text
 service                 freight-platform-backend
 application version     shared by all backend entrypoints
-canonical migration     0005_portal_workflows
+canonical migration     0006_identity_rbac_rls
 authentication          OIDC bearer JWT
 human identity provider auth.codestra.co
 ```

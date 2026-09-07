@@ -68,12 +68,21 @@ async def upgrade() -> None:
                 raise RuntimeError("another_schema_upgrade_is_running")
             try:
                 plan = upgrade_plan(*(await connection.run_sync(read_heads)))
+                # Release read locks while keeping the session advisory lock.
+                await connection.commit()
                 for config, target in plan:
                     process = await asyncio.create_subprocess_exec(
                         sys.executable, "-m", "alembic", "-c", config, "upgrade", target,
                         cwd=root,
                     )
-                    if await process.wait() != 0:
+                    try:
+                        status = await process.wait()
+                    except BaseException:
+                        if process.returncode is None:
+                            process.terminate()
+                        await process.wait()
+                        raise
+                    if status != 0:
                         raise RuntimeError("schema_upgrade_step_failed")
                 final = await connection.run_sync(read_heads)
                 if final != ((CANONICAL_MIGRATION_HEAD,), (COMPLIANCE_HEAD,)):

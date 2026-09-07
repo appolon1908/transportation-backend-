@@ -69,7 +69,7 @@ jobs:
           printf '%s' 'ci-redis-password-not-for-production' > /tmp/freight-scaffold/redis-password
 
           export APP_VERSION=0.6.0
-          export MIGRATION_HEAD=0005_portal_workflows
+          export MIGRATION_HEAD="$(python -c 'from app.release import CANONICAL_MIGRATION_HEAD; print(CANONICAL_MIGRATION_HEAD)')"
           export FREIGHT_BACKEND_IMAGE=ghcr.io/example/freight-platform-backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
           export FREIGHT_BACKEND_NETWORK=freight_private
           export MIGRATOR_DATABASE_URL=postgresql+asyncpg://freight_migrator:ci@database.invalid/freight
