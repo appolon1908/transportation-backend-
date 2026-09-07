@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from argparse import Namespace
 from contextlib import asynccontextmanager
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -186,7 +188,12 @@ async def test_disabled_membership_cannot_authenticate(identity_rows):
 
 
 async def test_bootstrap_is_repeatable_with_nonowner_rls_role(monkeypatch):
-    from scripts import bootstrap_identity
+    # scripts/ is an operator source tree, not an installed application package.
+    path = Path(__file__).resolve().parents[1] / "scripts/bootstrap_identity.py"
+    spec = spec_from_file_location("bootstrap_identity_under_test", path)
+    assert spec is not None and spec.loader is not None
+    bootstrap_identity = module_from_spec(spec)
+    spec.loader.exec_module(bootstrap_identity)
 
     @asynccontextmanager
     async def api_session():
