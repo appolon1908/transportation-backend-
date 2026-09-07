@@ -68,10 +68,10 @@ jobs:
         run: python -m compileall -q app migrations compliance_migrations tests scripts workers
 
       - name: Migrate empty database to canonical head
-        run: alembic upgrade head
+        run: python -m app.schema_upgrade
 
       - name: Assert canonical migration head
-        run: test "$(alembic heads | awk '{print $1}')" = "0005_portal_workflows"
+        run: test "$(alembic heads | awk '{print $1}')" = "0006_identity_rbac_rls"
 
       - name: Validate database role and RLS contracts
         env:

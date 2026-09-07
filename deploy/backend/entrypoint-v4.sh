@@ -55,8 +55,7 @@ case "$mode" in
     require_env INGRESS_DATABASE_URL
     require_env WORKER_DATABASE_URL
     export DATABASE_URL="$MIGRATOR_DATABASE_URL"
-    alembic upgrade head
-    alembic -c alembic-compliance.ini upgrade head
+    python -m app.schema_upgrade
     ;;
   api)
     reject_migrator_credential

@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import select
 
-from app.db import SessionLocal
+from app.db import SessionLocal, set_session_context
 from app.platform.models import (
     ExternalIdentity,
     Membership,
@@ -53,6 +53,9 @@ async def bootstrap(args: argparse.Namespace) -> None:
             principal = await db.get(Principal, identity.principal_id)
             if principal is None:
                 raise RuntimeError("External identity references a missing principal")
+
+        # The privileged bootstrap must also supply the transaction-local scope.
+        await set_session_context(db, tenant.id, str(principal.id))
 
         membership = await db.scalar(
             select(Membership).where(
