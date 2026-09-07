@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "2.0.0",
+  "repository": "appolon1908-hue/transportation-backend-",
+  "classification": "backend-api",
+  "targetBranch": "codex/codestra-orbit-v2-transportation-backend",
+  "adoptionMode": "contract-only",
+  "domain": null,
+  "domainStatus": "not-applicable",
+  "requirements": {
+    "renderedInterface": false,
+    "sharedHeaderFooter": false,
+    "loginLogoutPages": false,
+    "browserSessionContract": true,
+    "serviceAuthorization": true,
+    "browserTokenResponseProhibited": true,
+    "tenantCapabilities": true,
+    "idempotency": true,
+    "correlationId": true,
+    "audit": true,
+    "rollback": true
+  },
+  "status": "branch-created",
+  "blockers": [
+    "Implement and contract-test secure sessions, login, callback, refresh, logout, logout-all, and protected-route behavior for marketing, shipper, carrier, and operations portals.",
+    "Enforce tenant, shipper, carrier, dispatcher, finance, and administrator capabilities server-side; browser routing or hidden buttons are not authorization controls.",
+    "Register portal domains and identity clients separately, then prove idempotency, expected versions, outbox/inbox behavior, migrations, observability, immutable release, and rollback before deployment."
+  ]
+}
