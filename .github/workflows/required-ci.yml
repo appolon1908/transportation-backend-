@@ -23,6 +23,30 @@ jobs:
     name: required-ci
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5@sha256:5c88b8231230b803d74220c62b56a577085466fc5880be98a1ab8195249a7ebb
+        env:
+          POSTGRES_DB: freight
+          POSTGRES_USER: freight
+          POSTGRES_PASSWORD: freight
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U freight -d freight"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql+asyncpg://freight:freight@localhost:5432/freight
+      INGRESS_DATABASE_URL: postgresql+asyncpg://freight:freight@localhost:5432/freight
+      WORKER_DATABASE_URL: postgresql+asyncpg://freight:freight@localhost:5432/freight
+      ALLOW_DEVELOPMENT_IDENTITY_HEADERS: "true"
+      COMPLIANCE_IDENTIFIER_PEPPER: ci-only-pepper
+      OIDC_ISSUER: https://auth.example.test/realms/freight
+      OIDC_AUDIENCE: freight-api
+      INTEGRATION_ALLOWED_HOSTS: localhost,127.0.0.1,odoo.internal.example,n8n.internal.example
     steps:
       - name: Check out exact source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -57,6 +81,11 @@ jobs:
       - name: Reject committed secrets
         run: |
           "$RUNNER_TEMP/gitleaks-bin" dir --no-banner --redact --exit-code 1 .
+      - name: Prepare isolated contract database
+        run: |
+          set -Eeuo pipefail
+          python -m pip install --disable-pip-version-check --no-input -e ".[dev]"
+          python scripts/ci/prepare_contract_database.py
       - name: Run repository-aware CI
         run: |
           set -Eeuo pipefail
