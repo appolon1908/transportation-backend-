@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "environment": "staging",
+  "source": {
+    "repository": "appolon1908-hue/transportation-backend-",
+    "sha": "UNVERIFIED"
+  },
+  "runtime": {
+    "kind": "docker-compose",
+    "host": "UNVERIFIED",
+    "paths": {
+      "application_root": "UNVERIFIED",
+      "compose_project_dir": "UNVERIFIED",
+      "secrets_root": "UNVERIFIED",
+      "evidence_root": "UNVERIFIED",
+      "backup_root": "UNVERIFIED",
+      "backend_compose": "UNVERIFIED",
+      "gateway_compose": "UNVERIFIED",
+      "caddyfile": "UNVERIFIED",
+      "kong_template": "UNVERIFIED"
+    },
+    "networks": {
+      "backend": "UNVERIFIED",
+      "gateway": "UNVERIFIED"
+    }
+  },
+  "release": {
+    "backend": "UNVERIFIED",
+    "gateway_renderer": "UNVERIFIED",
+    "redis": "UNVERIFIED",
+    "kong": "UNVERIFIED",
+    "caddy": "UNVERIFIED"
+  },
+  "service_identities": {
+    "migrator": {
+      "database_user": "UNVERIFIED",
+      "can_bypass_rls": true,
+      "long_lived": false
+    },
+    "api": {
+      "database_user": "UNVERIFIED",
+      "can_bypass_rls": false,
+      "long_lived": true
+    },
+    "ingress": {
+      "database_user": "UNVERIFIED",
+      "can_bypass_rls": false,
+      "long_lived": true
+    },
+    "worker": {
+      "database_user": "UNVERIFIED",
+      "can_bypass_rls": false,
+      "long_lived": true
+    }
+  },
+  "capabilities": {
+    "external_delivery": false,
+    "odoo_write": false,
+    "n8n_delivery": false,
+    "customer_portal_external_access": false,
+    "carrier_portal_external_access": false,
+    "email_live_send": false,
+    "sms_live_send": false,
+    "production_dispatch": false
+  },
+  "verification": {
+    "status": "unverified",
+    "verified_by": "",
+    "verified_at": "",
+    "evidence_reference": "",
+    "deployment_authorized": false,
+    "notes": "Populate only from a read-only host inventory. Do not infer or guess paths."
+  }
+}

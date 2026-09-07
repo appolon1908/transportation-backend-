@@ -10,13 +10,15 @@ from app.main import app
 from app.security import Actor
 
 client = TestClient(app)
+_HTTP_METHODS = {"get", "post", "put", "patch", "delete", "options", "head", "trace"}
 
 
 def test_identity_routes_are_registered() -> None:
     registered = {
-        (method, route.path)
-        for route in app.routes
-        for method in getattr(route, "methods", set())
+        (method.upper(), path)
+        for path, path_item in app.openapi()["paths"].items()
+        for method in path_item
+        if method.lower() in _HTTP_METHODS
     }
     required = {
         ("GET", "/api/v1/auth/context"),
@@ -62,7 +64,9 @@ def test_production_rejects_development_identity_headers() -> None:
     with pytest.raises(ValueError, match="ALLOW_DEVELOPMENT_IDENTITY_HEADERS"):
         Settings(
             environment="production",
-            database_url="postgresql+asyncpg://app:secret@db/freight",
+            database_url="postgresql+asyncpg://freight_api:secret@db/freight",
+            ingress_database_url="postgresql+asyncpg://freight_ingress:secret@db/freight",
+            worker_database_url="postgresql+asyncpg://freight_worker:secret@db/freight",
             oidc_issuer="https://auth.example.com/realms/freight",
             oidc_audience="freight-api",
             allowed_hosts="api.example.com",

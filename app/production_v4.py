@@ -8,14 +8,15 @@ from sqlalchemy.exc import IntegrityError
 from starlette.responses import JSONResponse
 
 from app.compliance.api import router as compliance_router
+from app.config import get_settings
 from app.gateway.middleware import SecurityHeadersMiddleware, TrustedGatewayMiddleware
 from app.production import app as app
 
-if not any(
-    getattr(route, "path", None) == "/api/v1/admin/compliance/policies"
-    for route in app.routes
-):
+settings = get_settings()
+if not getattr(app.state, "freight_compliance_router_registered", False):
     app.include_router(compliance_router)
+    app.state.freight_compliance_router_registered = True
+    app.openapi_schema = None
 
 middleware_names = {item.cls.__name__ for item in app.user_middleware}
 if "SecurityHeadersMiddleware" not in middleware_names:
@@ -60,5 +61,5 @@ async def _integrity_error_handler(request: Request, exc: IntegrityError) -> JSO
 
 
 app.add_exception_handler(IntegrityError, _integrity_error_handler)
-app.title = "Freight Platform API"
-app.version = "0.4.0"
+app.title = settings.app_name
+app.version = settings.app_version

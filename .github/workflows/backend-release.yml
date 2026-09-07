@@ -4,11 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       source_ref:
-        description: Exact main SHA or signed release tag to build
+        description: Exact protected main SHA or signed release tag to build
         required: true
         type: string
       image_tag:
-        description: Human-readable immutable release tag (for example 2026.08.26-1)
+        description: Human-readable immutable release tag, for example 2026.08.26-1
+        required: true
+        type: string
+      python_base_image:
+        description: Digest-pinned Python base image, including @sha256:<64 hex>
         required: true
         type: string
 
@@ -28,50 +32,68 @@ env:
 jobs:
   publish-attested-image:
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     environment: production-release
 
     steps:
       - name: Validate requested release identity
         shell: bash
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          PYTHON_BASE_IMAGE: ${{ inputs.python_base_image }}
         run: |
           set -euo pipefail
-          [[ "${{ inputs.source_ref }}" =~ ^[0-9a-f]{40}$ || "${{ inputs.source_ref }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]
-          [[ "${{ inputs.image_tag }}" =~ ^[0-9A-Za-z][0-9A-Za-z._-]{2,63}$ ]]
+          [[ "$SOURCE_REF" =~ ^[0-9a-f]{40}$ || "$SOURCE_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]
+          [[ "$IMAGE_TAG" =~ ^[0-9A-Za-z][0-9A-Za-z._-]{2,63}$ ]]
+          [[ "$PYTHON_BASE_IMAGE" =~ ^python:3\.12-slim-bookworm@sha256:[0-9a-f]{64}$ ]]
 
-      - uses: actions/checkout@v4
+      - name: Check out the exact requested source without persisted credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5, Node 24
         with:
           ref: ${{ inputs.source_ref }}
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Require source to be on protected main or a signed release tag
+      - name: Require source on protected main or a signed release tag
         shell: bash
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
         run: |
           set -euo pipefail
           git fetch origin main --depth=1
           HEAD_SHA="$(git rev-parse HEAD)"
-          if [[ "${{ inputs.source_ref }}" =~ ^v ]]; then
-            git verify-tag "${{ inputs.source_ref }}"
+          if [[ "$SOURCE_REF" =~ ^v ]]; then
+            git verify-tag "$SOURCE_REF"
           else
-            test "$HEAD_SHA" = "${{ inputs.source_ref }}"
+            test "$HEAD_SHA" = "$SOURCE_REF"
             git merge-base --is-ancestor "$HEAD_SHA" origin/main
           fi
           test -z "$(git status --porcelain)"
-          echo "SOURCE_SHA=$HEAD_SHA" >> "$GITHUB_ENV"
+          BUILD_DATE="$(git show -s --format=%cI HEAD)"
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          {
+            echo "SOURCE_SHA=$HEAD_SHA"
+            echo "BUILD_DATE=$BUILD_DATE"
+            echo "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
+          } >> "$GITHUB_ENV"
 
-      - uses: docker/setup-qemu-action@v3
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 
-      - uses: docker/setup-buildx-action@v3
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      - uses: docker/login-action@v3
+      - name: Authenticate to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/metadata-action@v5
+      - name: Generate immutable image metadata
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         id: metadata
         with:
           images: ${{ env.IMAGE }}
@@ -82,10 +104,11 @@ jobs:
             org.opencontainers.image.title=freight-platform-backend
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+            org.opencontainers.image.created=${{ env.BUILD_DATE }}
             org.opencontainers.image.vendor=Codestra
 
       - name: Build and publish immutable multi-platform image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         id: build
         with:
           context: .
@@ -94,13 +117,18 @@ jobs:
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
+          build-args: |
+            PYTHON_BASE_IMAGE=${{ inputs.python_base_image }}
+            VCS_REF=${{ env.SOURCE_SHA }}
+            BUILD_DATE=${{ env.BUILD_DATE }}
+            VERSION=${{ inputs.image_tag }}
           provenance: mode=max
           sbom: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Generate reviewable SPDX SBOM
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           path: .
           format: spdx-json
@@ -108,7 +136,7 @@ jobs:
           upload-artifact: false
 
       - name: Scan the published digest before attestation
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
           image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
           format: sarif
@@ -117,22 +145,30 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
 
-      - uses: sigstore/cosign-installer@v3
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
 
-      - name: Keyless-sign the exact registry digest
+      - name: Keyless-sign and verify the exact registry digest
+        shell: bash
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
-        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+        run: |
+          set -euo pipefail
+          cosign sign --yes "${IMAGE}@${DIGEST}"
+          cosign verify \
+            --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp="^https://github.com/${{ github.repository }}/.github/workflows/backend-release.yml@refs/(heads/main|tags/v.*)$" \
+            "${IMAGE}@${DIGEST}"
 
       - name: Attach GitHub build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
 
       - name: Attach the reviewable SBOM attestation
-        uses: actions/attest-sbom@v2
+        uses: actions/attest-sbom@bd218ad0dbcb3e146bd073d1d9c6d78e08aa8a0b # v2
         with:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.build.outputs.digest }}
@@ -143,6 +179,8 @@ jobs:
         shell: bash
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          PYTHON_BASE_IMAGE: ${{ inputs.python_base_image }}
         run: |
           python - <<'PY'
           import hashlib
@@ -155,16 +193,24 @@ jobs:
               'canonical_image': os.environ['IMAGE'],
               'digest': os.environ['DIGEST'],
               'source_sha': os.environ['SOURCE_SHA'],
-              'release_tag': '${{ inputs.image_tag }}',
+              'source_date_epoch': int(os.environ['SOURCE_DATE_EPOCH']),
+              'build_date': os.environ['BUILD_DATE'],
+              'release_tag': os.environ['IMAGE_TAG'],
+              'python_base_image': os.environ['PYTHON_BASE_IMAGE'],
               'sbom_sha256': hashlib.sha256(sbom.read_bytes()).hexdigest(),
+              'runtime_paths_verified': False,
+              'host_contacted': False,
               'deployment_performed': False,
+              'external_capabilities_enabled': False,
           }
           Path('release-evidence.json').write_text(
-              json.dumps(evidence, indent=2, sort_keys=True) + '\n'
+              json.dumps(evidence, indent=2, sort_keys=True) + '\n',
+              encoding='utf-8',
           )
           PY
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload immutable release evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6, Node 24
         with:
           name: freight-backend-release-${{ inputs.image_tag }}
           path: |
@@ -175,4 +221,8 @@ jobs:
           retention-days: 90
 
       - name: Confirm release workflow stops before deployment
-        run: echo "Artifact published and attested; no staging or production deployment was executed."
+        run: |
+          echo "ARTIFACT_PUBLICATION=PASS"
+          echo "RUNTIME_PATHS_VERIFIED=NO"
+          echo "HOST_CONTACTED=NO"
+          echo "DEPLOYMENT_PERFORMED=NO"

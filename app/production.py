@@ -5,7 +5,9 @@ surfaces. Live outbound effects and external portal access remain capability-gat
 and disabled by default.
 """
 
+from app.config import get_settings
 from app.integrations.api import router as integration_router
+from app.integrations.health_api import router as integration_health_router
 from app.main import app as app
 from app.portals.admin_api import router as portal_admin_router
 from app.portals.carrier_api import router as carrier_portal_router
@@ -13,18 +15,22 @@ from app.portals.customer_api import router as customer_portal_router
 from app.portals.operations_api import router as operations_router
 from app.portals.review_api import router as portal_review_router
 
+settings = get_settings()
 ROUTERS = (
-    (integration_router, "/api/v1/admin/integrations/health"),
-    (portal_admin_router, "/api/v1/admin/portal-bindings"),
-    (portal_review_router, "/api/v1/admin/portal-reviews/claims"),
-    (operations_router, "/api/v1/operations/control-tower"),
-    (customer_portal_router, "/api/v1/portals/customer/context"),
-    (carrier_portal_router, "/api/v1/portals/carrier/context"),
+    integration_health_router,
+    integration_router,
+    portal_admin_router,
+    portal_review_router,
+    operations_router,
+    customer_portal_router,
+    carrier_portal_router,
 )
 
-for router, sentinel_path in ROUTERS:
-    if not any(getattr(route, "path", None) == sentinel_path for route in app.routes):
+if not getattr(app.state, "freight_production_routers_registered", False):
+    for router in ROUTERS:
         app.include_router(router)
+    app.state.freight_production_routers_registered = True
+    app.openapi_schema = None
 
-app.title = "Freight Platform API"
-app.version = "0.6.0"
+app.title = settings.app_name
+app.version = settings.app_version

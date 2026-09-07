@@ -3,7 +3,6 @@ from __future__ import annotations
 import hmac
 import ipaddress
 import os
-from collections.abc import Iterable
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -86,5 +85,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers.setdefault(
                 "Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload"
             )
-        response.headers.pop("Server", None)
+        if "Server" in response.headers:
+            del response.headers["Server"]
         return response

@@ -1,0 +1,259 @@
+name: deployment-preflight-read-only
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact reviewed backend commit SHA to validate
+        required: true
+        type: string
+      runtime_manifest_sha:
+        description: Exact commit SHA containing the separately reviewed runtime manifest
+        required: true
+        type: string
+      runtime_manifest_path:
+        description: Repository path to a verified-read-only runtime manifest
+        required: true
+        default: deploy/runtime/runtime-paths.example.json
+        type: string
+      target_environment:
+        description: Read-only preflight target
+        required: true
+        type: choice
+        options:
+          - staging
+
+permissions:
+  contents: read
+
+concurrency:
+  group: freight-deployment-preflight-${{ inputs.source_sha }}-${{ inputs.runtime_manifest_sha }}
+  cancel-in-progress: true
+
+jobs:
+  validate-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Validate immutable input syntax
+        shell: bash
+        env:
+          REQUESTED_SHA: ${{ inputs.source_sha }}
+          MANIFEST_SHA: ${{ inputs.runtime_manifest_sha }}
+          MANIFEST_PATH: ${{ inputs.runtime_manifest_path }}
+        run: |
+          set -euo pipefail
+          [[ "$REQUESTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$MANIFEST_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$MANIFEST_PATH" =~ ^deploy/runtime/[A-Za-z0-9._/-]+\.json$ ]]
+          [[ "$MANIFEST_PATH" != *..* ]]
+          mkdir -p /tmp/freight-preflight
+
+      - name: Check out the exact requested source without persisted credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5, Node 24
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Confirm exact source checkout is clean and on main lineage
+        shell: bash
+        env:
+          REQUESTED_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$REQUESTED_SHA"
+          git fetch origin main --force --tags
+          git merge-base --is-ancestor "$REQUESTED_SHA" origin/main
+          test -z "$(git status --porcelain)"
+
+      - name: Check out the separately reviewed runtime manifest commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5, Node 24
+        with:
+          ref: ${{ inputs.runtime_manifest_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: runtime-manifest-repo
+
+      - name: Confirm exact manifest checkout and path
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          MANIFEST_SHA: ${{ inputs.runtime_manifest_sha }}
+          MANIFEST_PATH: ${{ inputs.runtime_manifest_path }}
+        run: |
+          set -euo pipefail
+          test "$(git -C runtime-manifest-repo rev-parse HEAD)" = "$MANIFEST_SHA"
+          git -C runtime-manifest-repo fetch origin main --force --tags
+          git -C runtime-manifest-repo merge-base --is-ancestor "$MANIFEST_SHA" origin/main
+          git -C runtime-manifest-repo merge-base --is-ancestor "$SOURCE_SHA" "$MANIFEST_SHA"
+          test -z "$(git -C runtime-manifest-repo status --porcelain)"
+          test -f "runtime-manifest-repo/$MANIFEST_PATH"
+
+          changed_paths="$(git -C runtime-manifest-repo diff --name-only "$SOURCE_SHA" "$MANIFEST_SHA")"
+          test -n "$changed_paths"
+          while IFS= read -r changed_path; do
+            case "$changed_path" in
+              deploy/runtime/*.json|docs/deployment/evidence/*) ;;
+              *)
+                echo "runtime manifest commit contains non-evidence change: $changed_path" >&2
+                exit 1
+                ;;
+            esac
+          done <<< "$changed_paths"
+
+      - name: Install reviewed Python runtime
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6, Node 24
+        with:
+          python-version: "3.12"
+
+      - name: Compile deployment validators
+        run: >-
+          python -m compileall -q
+          scripts/deployment/validate_runtime_manifest.py
+          scripts/deployment/validate_compose_security.py
+          scripts/deployment/verify_no_live_deploy_steps.py
+          scripts/deployment/validate_ci_supply_chain.py
+
+      - name: Render deployment models with isolated non-secret placeholders
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' '# intentionally empty preflight integration environment' > /tmp/freight-preflight/integration.env
+          printf '%s' 'preflight-gateway-proof-not-for-production' > /tmp/freight-preflight/gateway-proof
+          printf '%s' 'preflight-compliance-pepper-not-for-production' > /tmp/freight-preflight/compliance-pepper
+          printf '%s' 'preflight-redis-password-not-for-production' > /tmp/freight-preflight/redis-password
+
+          export APP_VERSION=0.6.0
+          export MIGRATION_HEAD=0005_portal_workflows
+          export FREIGHT_BACKEND_IMAGE=ghcr.io/example/freight-platform-backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          export FREIGHT_BACKEND_NETWORK=freight_private
+          export MIGRATOR_DATABASE_URL=postgresql+asyncpg://freight_migrator:ci@database.invalid/freight
+          export DATABASE_URL=postgresql+asyncpg://freight_api:ci@database.invalid/freight
+          export INGRESS_DATABASE_URL=postgresql+asyncpg://freight_ingress:ci@database.invalid/freight
+          export WORKER_DATABASE_URL=postgresql+asyncpg://freight_worker:ci@database.invalid/freight
+          export ALLOWED_HOSTS=api.staging.example.invalid
+          export CORS_ORIGINS=https://app.staging.example.invalid
+          export OIDC_ISSUER=https://auth.example.invalid/realms/freight
+          export OIDC_AUDIENCE=freight-platform-api
+          export OIDC_JWKS_URL=https://auth.example.invalid/realms/freight/protocol/openid-connect/certs
+          export OIDC_ALLOWED_AZP=freight-platform-portal
+          export INTEGRATION_ALLOWED_HOSTS=odoo.internal.example,n8n.internal.example
+          export INTEGRATION_SECRETS_ENV_FILE=/tmp/freight-preflight/integration.env
+          export GATEWAY_SHARED_SECRET_FILE=/tmp/freight-preflight/gateway-proof
+          export COMPLIANCE_IDENTIFIER_PEPPER_FILE=/tmp/freight-preflight/compliance-pepper
+          export FORWARDED_ALLOW_IPS=10.40.0.0/24
+          export TRUSTED_GATEWAY_CIDRS=10.40.0.0/24
+
+          docker compose -f deploy/backend/compose.v4.yaml config --format json \
+            > /tmp/freight-preflight/backend-compose.json
+
+          export GATEWAY_RENDERER_IMAGE=ghcr.io/example/freight-gateway-renderer@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          export REDIS_IMAGE=redis@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+          export KONG_IMAGE=kong@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+          export CADDY_IMAGE=caddy@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+          export FRONTEND_ORIGIN=https://app.staging.example.invalid
+          export API_DOMAIN=api.staging.example.invalid
+          export TRUSTED_PROXY_CIDRS='10.40.0.0/24 127.0.0.1/32 ::1/128'
+          export KONG_REDIS_DATABASE=0
+          export KONG_REDIS_PASSWORD_FILE=/tmp/freight-preflight/redis-password
+
+          docker compose -f deploy/gateway/compose.gateway.yaml config --format json \
+            > /tmp/freight-preflight/gateway-compose.json
+
+      - name: Validate rendered Compose security
+        id: compose_security
+        continue-on-error: true
+        run: >-
+          python scripts/deployment/validate_compose_security.py
+          --backend /tmp/freight-preflight/backend-compose.json
+          --gateway /tmp/freight-preflight/gateway-compose.json
+          --evidence /tmp/freight-preflight/compose-security-evidence.json
+
+      - name: Require verified read-only runtime paths
+        id: runtime_manifest
+        continue-on-error: true
+        run: >-
+          python scripts/deployment/validate_runtime_manifest.py
+          --manifest "runtime-manifest-repo/${{ inputs.runtime_manifest_path }}"
+          --expected-environment "${{ inputs.target_environment }}"
+          --expected-source-sha "${{ inputs.source_sha }}"
+          --max-verification-age-hours 168
+          --evidence /tmp/freight-preflight/runtime-manifest-evidence.json
+
+      - name: Prove this workflow contains no live-host operations
+        id: workflow_safety
+        continue-on-error: true
+        run: >-
+          python scripts/deployment/verify_no_live_deploy_steps.py
+          --preflight .github/workflows/deployment-preflight.yml
+          --scaffold-ci .github/workflows/secure-deployment-scaffold-ci.yml
+          --evidence /tmp/freight-preflight/workflow-safety-evidence.json
+
+      - name: Write combined preflight evidence
+        if: always()
+        env:
+          COMPOSE_OUTCOME: ${{ steps.compose_security.outcome }}
+          RUNTIME_OUTCOME: ${{ steps.runtime_manifest.outcome }}
+          WORKFLOW_OUTCOME: ${{ steps.workflow_safety.outcome }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path('/tmp/freight-preflight')
+
+          def load(name: str):
+              path = root / name
+              if not path.exists():
+                  return {'error': f'{name} was not produced'}
+              return json.loads(path.read_text(encoding='utf-8'))
+
+          evidence = {
+              'repository': '${{ github.repository }}',
+              'source_sha': '${{ inputs.source_sha }}',
+              'target_environment': '${{ inputs.target_environment }}',
+              'runtime_manifest_sha': '${{ inputs.runtime_manifest_sha }}',
+              'runtime_manifest_path': '${{ inputs.runtime_manifest_path }}',
+              'outcomes': {
+                  'compose_security': os.environ['COMPOSE_OUTCOME'],
+                  'runtime_manifest': os.environ['RUNTIME_OUTCOME'],
+                  'workflow_safety': os.environ['WORKFLOW_OUTCOME'],
+              },
+              'compose_security': load('compose-security-evidence.json'),
+              'runtime_manifest': load('runtime-manifest-evidence.json'),
+              'workflow_safety': load('workflow-safety-evidence.json'),
+              'host_contacted': False,
+              'deployment_performed': False,
+              'live_capabilities_enabled': False,
+          }
+          (root / 'deployment-preflight-evidence.json').write_text(
+              json.dumps(evidence, indent=2, sort_keys=True) + '\n',
+              encoding='utf-8',
+          )
+          PY
+
+      - name: Upload non-secret deployment-preflight evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6, Node 24
+        with:
+          name: deployment-preflight-evidence-${{ inputs.source_sha }}
+          path: /tmp/freight-preflight/*-evidence.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Enforce all preflight gates
+        if: always()
+        env:
+          COMPOSE_OUTCOME: ${{ steps.compose_security.outcome }}
+          RUNTIME_OUTCOME: ${{ steps.runtime_manifest.outcome }}
+          WORKFLOW_OUTCOME: ${{ steps.workflow_safety.outcome }}
+        run: |
+          test "$COMPOSE_OUTCOME" = success
+          test "$RUNTIME_OUTCOME" = success
+          test "$WORKFLOW_OUTCOME" = success
+          echo "PREDEPLOYMENT_VALIDATION=PASS"
+          echo "HOST_CONTACTED=NO"
+          echo "DEPLOYMENT_PERFORMED=NO"

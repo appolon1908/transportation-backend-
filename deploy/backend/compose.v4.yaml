@@ -1,29 +1,55 @@
 name: freight-platform-backend
 
-x-backend-image: &backend-image ${FREIGHT_BACKEND_IMAGE:?set immutable image tag or digest}
-x-common-env: &common-env
+x-backend-image: &backend-image ${FREIGHT_BACKEND_IMAGE:?set immutable image digest}
+x-runtime-common-env: &runtime-common-env
   ENVIRONMENT: production
-  DATABASE_URL: ${DATABASE_URL:?required}
+  APP_VERSION: ${APP_VERSION:?required}
+  MIGRATION_HEAD: ${MIGRATION_HEAD:?required}
+  ALLOWED_HOSTS: ${ALLOWED_HOSTS:?required}
+  CORS_ORIGINS: ${CORS_ORIGINS:?required}
+  ENABLE_API_DOCS: "false"
+  ALLOW_DEVELOPMENT_IDENTITY_HEADERS: "false"
   OIDC_ISSUER: ${OIDC_ISSUER:?required}
   OIDC_AUDIENCE: ${OIDC_AUDIENCE:?required}
   OIDC_JWKS_URL: ${OIDC_JWKS_URL:?required}
+  OIDC_ALLOWED_AZP: ${OIDC_ALLOWED_AZP:?required}
   INTEGRATION_ALLOWED_HOSTS: ${INTEGRATION_ALLOWED_HOSTS:?required}
+  EXTERNAL_EFFECTS_APPROVED: "false"
+  CAPABILITY_LIVE_TENDER_SEND: "false"
+  CAPABILITY_LIVE_DISPATCH_NOTIFICATION: "false"
+  CAPABILITY_EMAIL_LIVE_SEND: "false"
+  CAPABILITY_SMS_LIVE_SEND: "false"
+  CAPABILITY_ACCOUNTING_LIVE_EXPORT: "false"
+  CAPABILITY_CUSTOMER_PORTAL_EXTERNAL_ACCESS: "false"
+  CAPABILITY_CARRIER_PORTAL_EXTERNAL_ACCESS: "false"
+
+x-runtime-database-env: &runtime-database-env
+  DATABASE_URL: ${DATABASE_URL:?dedicated freight_api NOBYPASSRLS credential required}
+  INGRESS_DATABASE_URL: ${INGRESS_DATABASE_URL:?dedicated freight_ingress NOBYPASSRLS credential required}
+  WORKER_DATABASE_URL: ${WORKER_DATABASE_URL:?dedicated freight_worker NOBYPASSRLS credential required}
 
 services:
   migrate:
     image: *backend-image
     command: ["migrate"]
     environment:
-      <<: *common-env
+      <<: *runtime-common-env
+      MIGRATOR_DATABASE_URL: ${MIGRATOR_DATABASE_URL:?short-lived migrator credential required}
+      DATABASE_URL: ${MIGRATOR_DATABASE_URL:?short-lived migrator credential required}
+      INGRESS_DATABASE_URL: ${INGRESS_DATABASE_URL:?dedicated freight_ingress NOBYPASSRLS credential required}
+      WORKER_DATABASE_URL: ${WORKER_DATABASE_URL:?dedicated freight_worker NOBYPASSRLS credential required}
     networks:
       - freight_private
     restart: "no"
     read_only: true
     tmpfs:
-      - /tmp:size=32m,noexec,nosuid
+      - /tmp:size=32m,noexec,nosuid,nodev
     security_opt:
       - no-new-privileges:true
     cap_drop: ["ALL"]
+    pids_limit: 128
+    healthcheck:
+      disable: true
 
   freight-api:
     image: *backend-image
@@ -31,7 +57,7 @@ services:
     env_file:
       - ${INTEGRATION_SECRETS_ENV_FILE:?required}
     environment:
-      <<: *common-env
+      <<: [*runtime-common-env, *runtime-database-env]
       PORT: "8000"
       FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:?required}
       TRUSTED_GATEWAY_CIDRS: ${TRUSTED_GATEWAY_CIDRS:?required}
@@ -48,11 +74,12 @@ services:
     restart: unless-stopped
     read_only: true
     tmpfs:
-      - /tmp:size=64m,noexec,nosuid
+      - /tmp:size=64m,noexec,nosuid,nodev
     security_opt:
       - no-new-privileges:true
     cap_drop: ["ALL"]
     pids_limit: 256
+    stop_grace_period: 30s
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2)"]
       interval: 30s
@@ -66,23 +93,28 @@ services:
     env_file:
       - ${INTEGRATION_SECRETS_ENV_FILE:?required}
     environment:
-      <<: *common-env
-      WORKER_DATABASE_URL: ${WORKER_DATABASE_URL:?dedicated BYPASSRLS worker role required}
-      WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-2}
-      DELIVERY_CONCURRENCY: ${DELIVERY_CONCURRENCY:-8}
-      OUTBOX_FANOUT_BATCH: ${OUTBOX_FANOUT_BATCH:-50}
-      DELIVERY_CLAIM_BATCH: ${DELIVERY_CLAIM_BATCH:-25}
-      INBOUND_CLAIM_BATCH: ${INBOUND_CLAIM_BATCH:-25}
+      <<: [*runtime-common-env, *runtime-database-env]
+      INTEGRATION_WORKER_POLL_SECONDS: ${INTEGRATION_WORKER_POLL_SECONDS:-2}
+      INTEGRATION_FANOUT_BATCH_SIZE: ${INTEGRATION_FANOUT_BATCH_SIZE:-100}
+      INTEGRATION_DELIVERY_BATCH_SIZE: ${INTEGRATION_DELIVERY_BATCH_SIZE:-25}
+      INTEGRATION_INBOX_BATCH_SIZE: ${INTEGRATION_INBOX_BATCH_SIZE:-50}
     networks:
       - freight_private
     restart: unless-stopped
     read_only: true
     tmpfs:
-      - /tmp:size=64m,noexec,nosuid
+      - /tmp:size=64m,noexec,nosuid,nodev
     security_opt:
       - no-new-privileges:true
     cap_drop: ["ALL"]
     pids_limit: 256
+    stop_grace_period: 45s
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
 
 secrets:
   gateway_shared_secret:
@@ -93,4 +125,4 @@ secrets:
 networks:
   freight_private:
     external: true
-    name: ${FREIGHT_BACKEND_NETWORK:-freight_private}
+    name: ${FREIGHT_BACKEND_NETWORK:?verified external network name required}

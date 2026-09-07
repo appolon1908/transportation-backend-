@@ -1,7 +1,7 @@
 {
 	admin off
 	servers {
-		trusted_proxies static 10.40.0.0/24 127.0.0.1/32 ::1/128
+		trusted_proxies static {$TRUSTED_PROXY_CIDRS}
 		client_ip_headers X-Forwarded-For X-Real-IP
 	}
 	log {
@@ -28,7 +28,7 @@
 	}
 }
 
-{$API_DOMAIN:api.codestra.co} {
+{$API_DOMAIN} {
 	encode zstd gzip
 
 	header {
@@ -41,7 +41,10 @@
 		Cross-Origin-Resource-Policy "same-site"
 	}
 
-	@webhooks path /api/v1/webhooks/inbound/*
+	@webhooks {
+		method POST
+		path /api/v1/integrations/*/webhooks/* /api/v1/integrations/tracking/*/webhooks
+	}
 	handle @webhooks {
 		request_body {
 			max_size 1MB

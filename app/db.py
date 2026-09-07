@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Session
+from sqlalchemy.pool import NullPool
 
 from app.config import get_settings
 
@@ -18,6 +19,10 @@ settings = get_settings()
 
 
 def _build_engine(database_url: str, *, pool_size: int, max_overflow: int) -> AsyncEngine:
+    if settings.environment.lower() == "test":
+        # TestClient and pytest-asyncio may execute requests on different event loops.
+        # asyncpg connections are loop-bound, so never retain them between test loops.
+        return create_async_engine(database_url, poolclass=NullPool)
     return create_async_engine(
         database_url,
         pool_pre_ping=True,

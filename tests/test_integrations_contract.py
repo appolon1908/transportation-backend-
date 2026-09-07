@@ -23,7 +23,8 @@ from app.integrations_main import app
 
 
 def test_integration_routes_are_registered() -> None:
-    routes = {route.path for route in app.routes}
+    routes = set(app.openapi()["paths"])
+    assert "/api/v1/admin/integrations/health" in routes
     assert "/api/v1/admin/integrations" in routes
     assert "/api/v1/admin/integrations/{connection_id}/deliveries" in routes
     assert "/api/v1/admin/integrations/inbox/messages" in routes

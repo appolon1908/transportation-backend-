@@ -31,7 +31,8 @@ services:
       - name: freight-inbound-webhooks
         methods: [POST]
         paths:
-          - /api/v1/webhooks/inbound
+          - ~/api/v1/integrations/[^/]+/webhooks/[^/]+$
+          - ~/api/v1/integrations/tracking/[^/]+/webhooks$
         strip_path: false
         preserve_host: true
         protocols: [http, https]

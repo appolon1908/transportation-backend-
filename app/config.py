@@ -6,6 +6,8 @@ from urllib.parse import urlparse
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.release import CANONICAL_MIGRATION_HEAD
+
 
 class Settings(BaseSettings):
     """Runtime configuration with production-safe defaults.
@@ -19,6 +21,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     app_name: str = "Freight Platform API"
     app_version: str = "0.6.0"
+    migration_head: str = CANONICAL_MIGRATION_HEAD
     database_url: str = "postgresql+asyncpg://freight:freight@localhost:5432/freight"
     ingress_database_url: str = ""
     worker_database_url: str = ""
@@ -96,6 +99,11 @@ class Settings(BaseSettings):
         if configured_algorithms and not configured_algorithms <= allowed_algorithms:
             unsupported = sorted(configured_algorithms - allowed_algorithms)
             raise ValueError(f"Unsupported OIDC algorithms: {', '.join(unsupported)}")
+        if self.migration_head != CANONICAL_MIGRATION_HEAD:
+            raise ValueError(
+                "MIGRATION_HEAD must match the canonical application schema head "
+                f"{CANONICAL_MIGRATION_HEAD}"
+            )
 
         if not self.is_production:
             return self

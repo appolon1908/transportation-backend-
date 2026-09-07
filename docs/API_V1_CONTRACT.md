@@ -1,83 +1,109 @@
 # Freight Platform V1 API Contract
 
-This document is the binding route inventory for the first freight-platform backend foundation. Business authority remains in backend domain/command code; routes are transport interfaces only.
+`app.production_v4:app` is the authoritative production API composition. Generated OpenAPI is the machine-readable contract for paths, methods, schemas and authentication; this document records the operating rules and major route groups.
 
-## API-wide rules
-
-All `/api/v1/*` business endpoints are tenant-scoped and protected by authentication/permission rules except provider webhook ingress, which uses its own provider authentication/signature contract.
-
-Material mutations require an `Idempotency-Key`. High-risk state transitions require an expected aggregate version and return `412 STALE_VERSION` when stale. Core resource reads expose `ETag` where implemented. Standard errors use `{code,message,correlation_id,fields?}`.
-
-Live external side effects remain capability-gated and disabled by default.
-
-## Health / platform
+## Release identity
 
 ```text
-GET    /health/live
-GET    /health/ready
-GET    /health/version
-GET    /api/v1/me
-GET    /api/v1/me/permissions
-GET    /api/v1/capabilities
+service                 freight-platform-backend
+application version     shared by all backend entrypoints
+canonical migration     0005_portal_workflows
+authentication          OIDC bearer JWT
+human identity provider auth.codestra.co
 ```
 
-## Customers
+`GET /health/version` exposes `name`, `version`, `git_sha`, `image_digest` and `migration_head`. Configuration fails when `MIGRATION_HEAD` does not equal the canonical schema head.
+
+## Cross-cutting contract
+
+Authenticated `/api/v1/*` operations are tenant scoped and permission checked. OpenAPI declares an HTTP `BearerAuth` JWT scheme. Provider webhook ingress is separately authenticated with timestamp-bound signatures, rotating key identity and payload hashing.
+
+Material commands require `Idempotency-Key`. Versioned state transitions reject stale writes. Responses carry `X-Correlation-Id`; API responses use `Cache-Control: no-store`. External delivery and external portal access remain disabled unless an approved production change explicitly activates the relevant capability.
+
+## Health and caller context
 
 ```text
-GET    /api/v1/customers
-POST   /api/v1/customers
-GET    /api/v1/customers/{customer_id}
-PATCH  /api/v1/customers/{customer_id}
-GET    /api/v1/customers/{customer_id}/locations
-POST   /api/v1/customers/{customer_id}/locations
-GET    /api/v1/customers/{customer_id}/contacts
-POST   /api/v1/customers/{customer_id}/contacts
+GET /health/live
+GET /health/ready
+GET /health/version
+GET /api/v1/me
+GET /api/v1/me/permissions
+GET /api/v1/capabilities
+GET /api/v1/auth/context
 ```
 
-## Carriers
+## Persistent administration and tenancy
 
 ```text
-GET    /api/v1/carriers
-POST   /api/v1/carriers
-GET    /api/v1/carriers/{carrier_id}
-PATCH  /api/v1/carriers/{carrier_id}
-GET    /api/v1/carriers/{carrier_id}/contacts
-GET    /api/v1/carriers/{carrier_id}/equipment
-GET    /api/v1/carriers/{carrier_id}/compliance
-GET    /api/v1/carriers/{carrier_id}/insurance
-POST   /api/v1/carriers/{carrier_id}/approve
-POST   /api/v1/carriers/{carrier_id}/suspend
+GET   /api/v1/admin/tenant
+PATCH /api/v1/admin/tenant
+GET   /api/v1/admin/organizations
+POST  /api/v1/admin/organizations
+GET   /api/v1/admin/users
+POST  /api/v1/admin/users
+POST  /api/v1/admin/users/{principal_id}/identities
+GET   /api/v1/admin/memberships
+POST  /api/v1/admin/memberships
+PUT   /api/v1/admin/memberships/{membership_id}/roles
+GET   /api/v1/admin/roles
+POST  /api/v1/admin/roles
+PUT   /api/v1/admin/roles/{role_id}/permissions
+GET   /api/v1/admin/permissions
+GET   /api/v1/admin/capabilities
+PATCH /api/v1/admin/capabilities/{code}
+GET   /api/v1/admin/audit
 ```
 
-## Quotes
+The persistent identity/RBAC implementation is authoritative. The former `501 IDENTITY_DIRECTORY_NOT_IMPLEMENTED` placeholders are removed before route registration.
+
+## Customers and carriers
 
 ```text
-GET    /api/v1/quotes
-POST   /api/v1/quotes
-GET    /api/v1/quotes/{quote_id}
-POST   /api/v1/quotes/{quote_id}/send
-POST   /api/v1/quotes/{quote_id}/accept
-POST   /api/v1/quotes/{quote_id}/decline
-POST   /api/v1/quotes/{quote_id}/revise
+GET   /api/v1/customers
+POST  /api/v1/customers
+GET   /api/v1/customers/{customer_id}
+PATCH /api/v1/customers/{customer_id}
+GET   /api/v1/customers/{customer_id}/locations
+POST  /api/v1/customers/{customer_id}/locations
+GET   /api/v1/customers/{customer_id}/contacts
+POST  /api/v1/customers/{customer_id}/contacts
+
+GET   /api/v1/carriers
+POST  /api/v1/carriers
+GET   /api/v1/carriers/{carrier_id}
+PATCH /api/v1/carriers/{carrier_id}
+GET   /api/v1/carriers/{carrier_id}/contacts
+GET   /api/v1/carriers/{carrier_id}/equipment
+GET   /api/v1/carriers/{carrier_id}/compliance
+GET   /api/v1/carriers/{carrier_id}/insurance
+POST  /api/v1/carriers/{carrier_id}/approve
+POST  /api/v1/carriers/{carrier_id}/suspend
+POST  /api/v1/carriers/{carrier_id}/readiness/evaluate
 ```
 
-## Shipments
+Carrier assignment and dispatch are database-blocked when authority, insurance or safety policy requirements are not satisfied.
+
+## Quotes, shipments and loads
 
 ```text
-GET    /api/v1/shipments
-POST   /api/v1/shipments
-GET    /api/v1/shipments/{shipment_id}
-PATCH  /api/v1/shipments/{shipment_id}
-POST   /api/v1/shipments/{shipment_id}/cancel
-GET    /api/v1/shipments/{shipment_id}/legs
-POST   /api/v1/shipments/{shipment_id}/legs
-GET    /api/v1/shipments/{shipment_id}/stops
-POST   /api/v1/shipments/{shipment_id}/stops
-```
+GET  /api/v1/quotes
+POST /api/v1/quotes
+GET  /api/v1/quotes/{quote_id}
+POST /api/v1/quotes/{quote_id}/send
+POST /api/v1/quotes/{quote_id}/accept
+POST /api/v1/quotes/{quote_id}/decline
+POST /api/v1/quotes/{quote_id}/revise
 
-## Loads / tendering / dispatch
+GET   /api/v1/shipments
+POST  /api/v1/shipments
+GET   /api/v1/shipments/{shipment_id}
+PATCH /api/v1/shipments/{shipment_id}
+POST  /api/v1/shipments/{shipment_id}/cancel
+GET   /api/v1/shipments/{shipment_id}/legs
+POST  /api/v1/shipments/{shipment_id}/legs
+GET   /api/v1/shipments/{shipment_id}/stops
+POST  /api/v1/shipments/{shipment_id}/stops
 
-```text
 GET    /api/v1/loads
 POST   /api/v1/loads
 GET    /api/v1/loads/{load_id}
@@ -95,84 +121,135 @@ POST   /api/v1/loads/{load_id}/depart
 POST   /api/v1/loads/{load_id}/deliver
 ```
 
-## Visibility / tracking
+## Visibility and tracking
 
 ```text
-GET    /api/v1/loads/{load_id}/tracking
-GET    /api/v1/loads/{load_id}/positions
-GET    /api/v1/loads/{load_id}/exceptions
-POST   /api/v1/loads/{load_id}/tracking/manual-event
-POST   /api/v1/integrations/tracking/{provider}/webhooks
+GET  /api/v1/loads/{load_id}/tracking
+GET  /api/v1/loads/{load_id}/positions
+GET  /api/v1/loads/{load_id}/exceptions
+POST /api/v1/loads/{load_id}/tracking/manual-event
+POST /api/v1/integrations/tracking/{provider}/webhooks
 ```
 
-Tracking webhook ingress requires `X-Webhook-Id`, `X-Webhook-Timestamp`, and `X-Webhook-Signature`. The signature is HMAC-SHA256 over `<timestamp>.<raw-body>`, timestamp tolerance is five minutes, body size is capped at 1 MB, and verified events are durably inserted into the inbox before `202` acknowledgement.
+The legacy tracking webhook requires `X-Webhook-Id`, `X-Webhook-Timestamp` and `X-Webhook-Signature`. The durable provider-neutral integration ingress below is preferred.
 
-## Documents
+## Durable integrations, Odoo and n8n
 
 ```text
-POST   /api/v1/documents/upload-sessions
-POST   /api/v1/documents/{document_id}/confirm
-GET    /api/v1/loads/{load_id}/documents
-POST   /api/v1/loads/{load_id}/documents
-POST   /api/v1/loads/{load_id}/pod
+GET  /api/v1/admin/integrations/health
+GET  /api/v1/admin/integrations
+POST /api/v1/admin/integrations
+GET  /api/v1/admin/integrations/{connection_id}/deliveries
+GET  /api/v1/admin/integrations/inbox/messages
+GET  /api/v1/admin/integrations/provenance/verify
+POST /api/v1/integrations/{webhook_slug}/webhooks/{provider}
 ```
 
-Upload, confirmation, attachment and POD write endpoints currently fail closed with `503 STORAGE_NOT_CONFIGURED`. They must not return synthetic success before secure object storage and malware scanning are implemented.
+The integration boundary supports Odoo JSON-2, n8n signed webhooks and generic signed webhooks. It provides forced tenant RLS, distinct API/ingress/worker database roles, durable inbox/outbox records, timestamp replay protection, event-ID deduplication, same-ID/different-payload collision rejection, retries and provenance verification. Credentials are references resolved outside Git and never appear in health responses.
 
-## Finance
+## Compliance administration
 
 ```text
-GET    /api/v1/invoices
-POST   /api/v1/invoices
-GET    /api/v1/invoices/{invoice_id}
-POST   /api/v1/invoices/{invoice_id}/approve
-POST   /api/v1/invoices/{invoice_id}/void
-
-GET    /api/v1/carrier-settlements
-POST   /api/v1/carrier-settlements
-GET    /api/v1/carrier-settlements/{settlement_id}
-POST   /api/v1/carrier-settlements/{settlement_id}/approve
-
-GET    /api/v1/claims
-POST   /api/v1/claims
-GET    /api/v1/claims/{claim_id}
+GET  /api/v1/admin/compliance/policies
+POST /api/v1/admin/compliance/policies
 ```
 
-## Operations
+Compliance includes versioned policy, authority, insurance, safety, override and readiness-decision records with forced tenant RLS and database enforcement functions.
+
+## Operations, finance and claims
 
 ```text
-GET    /api/v1/operations/exceptions
-POST   /api/v1/operations/exceptions/{exception_id}/acknowledge
-POST   /api/v1/operations/exceptions/{exception_id}/assign
-POST   /api/v1/operations/exceptions/{exception_id}/resolve
-GET    /api/v1/operations/dead-letters
-POST   /api/v1/operations/dead-letters/{message_id}/replay
+GET  /api/v1/operations/control-tower
+GET  /api/v1/operations/exceptions
+POST /api/v1/operations/exceptions/{exception_id}/acknowledge
+POST /api/v1/operations/exceptions/{exception_id}/assign
+POST /api/v1/operations/exceptions/{exception_id}/resolve
+GET  /api/v1/operations/dead-letters
+POST /api/v1/operations/dead-letters/{message_id}/replay
+
+GET  /api/v1/invoices
+POST /api/v1/invoices
+GET  /api/v1/invoices/{invoice_id}
+POST /api/v1/invoices/{invoice_id}/approve
+POST /api/v1/invoices/{invoice_id}/void
+GET  /api/v1/carrier-settlements
+POST /api/v1/carrier-settlements
+GET  /api/v1/carrier-settlements/{settlement_id}
+POST /api/v1/carrier-settlements/{settlement_id}/approve
+GET  /api/v1/claims
+POST /api/v1/claims
+GET  /api/v1/claims/{claim_id}
 ```
 
-## Administration
+## Portal APIs
+
+### Administration and review
 
 ```text
-GET    /api/v1/admin/users
-GET    /api/v1/admin/roles
-GET    /api/v1/admin/permissions
-GET    /api/v1/admin/capabilities
-PATCH  /api/v1/admin/capabilities/{code}
+GET   /api/v1/admin/portal-bindings
+POST  /api/v1/admin/portal-bindings
+GET   /api/v1/admin/portal-reviews/claims
+PATCH /api/v1/admin/portal-reviews/claims/{submission_id}
+GET   /api/v1/admin/portal-reviews/carrier-evidence
+PATCH /api/v1/admin/portal-reviews/carrier-evidence/{submission_id}
 ```
 
-`GET /api/v1/admin/users` currently fails explicitly with `501 IDENTITY_DIRECTORY_NOT_IMPLEMENTED`; persistent external identity/user-directory storage belongs to the authentication/authorization PR and must not be faked.
+There are no `/decision` review paths. Review writes are `PATCH` operations with expected-version validation, idempotency, audit and provenance evidence.
 
-## Current capability defaults
+### Customer portal
 
 ```text
-carrier.live_tender_send = disabled
-carrier.live_dispatch_notification = disabled
-email.live_send = disabled
-sms.live_send = disabled
-accounting.live_export = disabled
-customer_portal.external_access = disabled
-carrier_portal.external_access = disabled
+GET  /api/v1/portals/customer/context
+GET  /api/v1/portals/customer/quotes
+GET  /api/v1/portals/customer/quotes/{quote_id}
+POST /api/v1/portals/customer/quotes/{quote_id}/decision
+GET  /api/v1/portals/customer/shipments
+GET  /api/v1/portals/customer/shipments/{shipment_id}
+GET  /api/v1/portals/customer/documents
+GET  /api/v1/portals/customer/invoices
+GET  /api/v1/portals/customer/claims
+POST /api/v1/portals/customer/claims
 ```
 
-## Next API implementation gates
+### Carrier portal
 
-The route inventory above is not the same as production readiness. Remaining mandatory work includes persistent identity/RBAC, PostgreSQL RLS, DB-level compare-and-swap/locking for high-contention transitions, outbox/inbox worker leasing and delivery adapters, secure document storage/scanning, provider ETA/geofence adapters, full integration/negative/concurrency tests, staging, restore rehearsal, canary and rollback evidence.
+```text
+GET  /api/v1/portals/carrier/context
+GET  /api/v1/portals/carrier/tenders
+POST /api/v1/portals/carrier/tenders/{tender_id}/response
+GET  /api/v1/portals/carrier/loads
+GET  /api/v1/portals/carrier/loads/{load_id}
+POST /api/v1/portals/carrier/loads/{load_id}/tracking
+GET  /api/v1/portals/carrier/documents
+GET  /api/v1/portals/carrier/evidence
+POST /api/v1/portals/carrier/evidence
+GET  /api/v1/portals/carrier/settlements
+```
+
+Customer and carrier public access remain disabled by default. Internal review and staging can exercise the workflows without enabling public portal capabilities.
+
+## Document pipeline status
+
+```text
+POST /api/v1/documents/upload-sessions
+POST /api/v1/documents/{document_id}/confirm
+GET  /api/v1/loads/{load_id}/documents
+POST /api/v1/loads/{load_id}/documents
+POST /api/v1/loads/{load_id}/pod
+```
+
+Document reads are implemented. Upload, confirmation, attachment and POD writes intentionally return `503 STORAGE_NOT_CONFIGURED` until secure object storage, malware scanning, quarantine, content validation and retention controls are implemented on `be/documents-secure-storage-v1`.
+
+## Default-disabled capabilities
+
+```text
+carrier.live_tender_send                 disabled
+carrier.live_dispatch_notification       disabled
+email.live_send                          disabled
+sms.live_send                            disabled
+accounting.live_export                    disabled
+customer_portal.external_access           disabled
+carrier_portal.external_access            disabled
+```
+
+Route presence and source tests are not deployment approval. Production additionally requires exact-head green CI, independent review, protected merge, immutable signed images, secrets outside Git, staging backup/restore and rollback evidence, Kong/Caddy validation and a capability-by-capability canary.

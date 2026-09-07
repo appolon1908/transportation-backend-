@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1.7
-ARG PYTHON_BASE_IMAGE=python:3.12-slim-bookworm
+# The release workflow must provide a digest-pinned value such as:
+# python:3.12-slim-bookworm@sha256:<verified-manifest-digest>
+ARG PYTHON_BASE_IMAGE
 FROM ${PYTHON_BASE_IMAGE} AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -16,7 +18,6 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --upgrade pip setuptools wheel \
     && python -m pip install .
 
-ARG PYTHON_BASE_IMAGE=python:3.12-slim-bookworm
 FROM ${PYTHON_BASE_IMAGE} AS runtime
 
 ARG VCS_REF=unknown
@@ -25,7 +26,7 @@ ARG VERSION=0.1.0
 
 LABEL org.opencontainers.image.title="freight-platform-backend" \
       org.opencontainers.image.description="Multi-tenant freight platform API and durable workers" \
-      org.opencontainers.image.source="https://github.com/appolon1908-hue/freight-platform-backend" \
+      org.opencontainers.image.source="https://github.com/appolon1908-hue/transportation-backend-" \
       org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.version="${VERSION}"

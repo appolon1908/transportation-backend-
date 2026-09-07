@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - "be/release-readiness-v6"
+      - "be/api-contract-readiness-v1"
 
 permissions:
   contents: read
@@ -16,11 +17,11 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     services:
       postgres:
-        image: postgis/postgis:17-3.5
+        image: postgis/postgis:17-3.5@sha256:5c88b8231230b803d74220c62b56a577085466fc5880be98a1ab8195249a7ebb
         env:
           POSTGRES_DB: freight
           POSTGRES_USER: freight
@@ -34,8 +35,10 @@ jobs:
           --health-retries 20
 
     env:
-      ENVIRONMENT: development
+      ENVIRONMENT: test
       DATABASE_URL: postgresql+asyncpg://freight:freight@localhost:5432/freight
+      INGRESS_DATABASE_URL: postgresql+asyncpg://freight:freight@localhost:5432/freight
+      WORKER_DATABASE_URL: postgresql+asyncpg://freight:freight@localhost:5432/freight
       ALLOW_DEVELOPMENT_IDENTITY_HEADERS: "true"
       COMPLIANCE_IDENTIFIER_PEPPER: ci-only-pepper
       OIDC_ISSUER: https://auth.example.test/realms/freight
@@ -43,8 +46,14 @@ jobs:
       INTEGRATION_ALLOWED_HOSTS: localhost,127.0.0.1,odoo.internal.example,n8n.internal.example
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Check out source without persisted credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5, Node 24
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install reviewed Python runtime
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6, Node 24
         with:
           python-version: "3.12"
           cache: pip

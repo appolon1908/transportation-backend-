@@ -5,7 +5,7 @@ import re
 import time
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -16,11 +16,45 @@ from app.api import router as core_router
 from app.api_extended import router as extended_router
 from app.config import get_settings
 from app.db import SessionLocal
+from app.openapi_contract import install_openapi_contract
+from app.operations.replay_api import router as operations_replay_router
 from app.platform.router import router as platform_router
+from app.release import BACKEND_SERVICE_NAME, release_identity
 
 settings = get_settings()
 logger = logging.getLogger("freight.api")
 _correlation_pattern = re.compile(r"^[A-Za-z0-9._:-]{1,80}$")
+_SUPERSEDED_CORE_ROUTE_PATHS = {
+    "/carriers/{carrier_id}/compliance",
+}
+_SUPERSEDED_EXTENDED_ROUTE_PATHS = {
+    "/admin/users",
+    "/admin/roles",
+    "/admin/permissions",
+    "/admin/capabilities",
+    "/admin/capabilities/{code}",
+    "/integrations/tracking/{provider}/webhooks",
+    "/operations/dead-letters/{message_id}/replay",
+}
+
+
+def _remove_superseded_routes(router: APIRouter, relative_paths: set[str]) -> None:
+    """Keep one authoritative owner for every production method/path pair."""
+
+    retained = []
+    for route in router.routes:
+        path = str(getattr(route, "path", ""))
+        relative_path = path.removeprefix("/api/v1")
+        if relative_path in relative_paths:
+            continue
+        retained.append(route)
+    router.routes[:] = retained
+
+
+# Preserve the newer compliance/webhook owners and the command-backed recovery
+# owner together. Removing just the identity placeholders revives unsafe handlers.
+_remove_superseded_routes(core_router, _SUPERSEDED_CORE_ROUTE_PATHS)
+_remove_superseded_routes(extended_router, _SUPERSEDED_EXTENDED_ROUTE_PATHS)
 
 app = FastAPI(
     title=settings.app_name,
@@ -151,18 +185,20 @@ async def health_ready():
 
 @app.get("/health/version", tags=["health"])
 async def health_version():
-    import os
-
-    return {
-        "name": "freight-platform-backend",
-        "version": settings.app_version,
-        "git_sha": os.getenv("GIT_SHA", "unknown"),
-        "image_digest": os.getenv("IMAGE_DIGEST", "unknown"),
-        "migration_head": os.getenv("MIGRATION_HEAD", "0002_identity_tenancy"),
-    }
+    return release_identity(
+        service_name=BACKEND_SERVICE_NAME,
+        version=settings.app_version,
+        migration_head=settings.migration_head,
+    )
 
 
-# Identity routes intentionally precede the foundation's legacy placeholder routes.
+# Persistent identity and command-backed recovery precede foundation routes.
 app.include_router(platform_router)
+app.include_router(operations_replay_router)
 app.include_router(core_router)
 app.include_router(extended_router)
+install_openapi_contract(
+    app,
+    service_name=BACKEND_SERVICE_NAME,
+    migration_head=settings.migration_head,
+)

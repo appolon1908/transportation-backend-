@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 client = TestClient(app)
+_HTTP_METHODS = {"get", "post", "put", "patch", "delete", "options", "head", "trace"}
 
 
 def test_live_health() -> None:
@@ -13,9 +14,10 @@ def test_live_health() -> None:
 
 def test_complete_v1_routes_are_registered() -> None:
     registered = {
-        (method, route.path)
-        for route in app.routes
-        for method in getattr(route, "methods", set())
+        (method.upper(), path)
+        for path, path_item in app.openapi()["paths"].items()
+        for method in path_item
+        if method.lower() in _HTTP_METHODS
     }
     required = {
         ("GET", "/health/live"),

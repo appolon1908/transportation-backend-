@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
@@ -8,14 +7,23 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from app.config import get_settings
 from app.db import SessionLocal
 from app.integrations.api import router as integrations_router
+from app.integrations.health_api import router as integration_health_router
+from app.openapi_contract import install_openapi_contract
+from app.release import INTEGRATION_SERVICE_NAME, release_identity
 
+settings = get_settings()
 app = FastAPI(
     title="Freight Platform Integration API",
-    version=os.getenv("APP_VERSION", "0.3.0"),
+    version=settings.app_version,
     description="Signed webhooks, durable delivery, Odoo, n8n and provenance boundary.",
-    docs_url=None if os.getenv("ENVIRONMENT", "development").lower() == "production" else "/docs",
+    docs_url=(
+        None
+        if settings.is_production or not settings.enable_api_docs
+        else "/docs"
+    ),
     redoc_url=None,
 )
 
@@ -36,10 +44,11 @@ async def correlation_and_security_headers(request: Request, call_next):
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    detail = exc.detail if isinstance(exc.detail, dict) else {
-        "code": "HTTP_ERROR",
-        "message": str(exc.detail),
-    }
+    detail = (
+        exc.detail
+        if isinstance(exc.detail, dict)
+        else {"code": "HTTP_ERROR", "message": str(exc.detail)}
+    )
     detail.setdefault("correlation_id", getattr(request.state, "correlation_id", None))
     return JSONResponse(status_code=exc.status_code, content=detail, headers=exc.headers)
 
@@ -71,7 +80,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 @app.get("/health/live", tags=["health"])
 async def health_live():
-    return {"status": "live", "service": "freight-platform-integrations"}
+    return {"status": "live", "service": INTEGRATION_SERVICE_NAME}
 
 
 @app.get("/health/ready", tags=["health"])
@@ -84,18 +93,26 @@ async def health_ready():
     except Exception:
         return JSONResponse(
             status_code=503,
-            content={"status": "not_ready", "dependencies": {"database": "unavailable_or_unmigrated"}},
+            content={
+                "status": "not_ready",
+                "dependencies": {"database": "unavailable_or_unmigrated"},
+            },
         )
 
 
 @app.get("/health/version", tags=["health"])
 async def health_version():
-    return {
-        "version": os.getenv("APP_VERSION", "0.3.0"),
-        "git_sha": os.getenv("GIT_SHA", "unknown"),
-        "image_digest": os.getenv("IMAGE_DIGEST", "unknown"),
-        "migration_head": os.getenv("MIGRATION_HEAD", "0003_integrations_durability"),
-    }
+    return release_identity(
+        service_name=INTEGRATION_SERVICE_NAME,
+        version=settings.app_version,
+        migration_head=settings.migration_head,
+    )
 
 
+app.include_router(integration_health_router)
 app.include_router(integrations_router)
+install_openapi_contract(
+    app,
+    service_name=INTEGRATION_SERVICE_NAME,
+    migration_head=settings.migration_head,
+)

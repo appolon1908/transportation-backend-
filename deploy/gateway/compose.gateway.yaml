@@ -2,7 +2,7 @@ name: freight-platform-gateway
 
 services:
   kong-config-render:
-    image: ${GATEWAY_RENDERER_IMAGE:?set immutable renderer image tag or digest}
+    image: ${GATEWAY_RENDERER_IMAGE:?set immutable renderer image digest}
     command: ["/templates/kong.yml.template", "/generated/kong.yml"]
     environment:
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:?required}
@@ -21,13 +21,14 @@ services:
     restart: "no"
     read_only: true
     tmpfs:
-      - /tmp:size=16m,noexec,nosuid
+      - /tmp:size=16m,noexec,nosuid,nodev
     security_opt:
       - no-new-privileges:true
     cap_drop: ["ALL"]
+    pids_limit: 128
 
   redis:
-    image: ${REDIS_IMAGE:?set immutable Redis image tag or digest}
+    image: ${REDIS_IMAGE:?set immutable Redis image digest}
     command:
       - sh
       - -ec
@@ -49,11 +50,12 @@ services:
     restart: unless-stopped
     read_only: true
     tmpfs:
-      - /tmp:size=32m,noexec,nosuid
+      - /tmp:size=32m,noexec,nosuid,nodev
     security_opt:
       - no-new-privileges:true
     cap_drop: ["ALL"]
     pids_limit: 128
+    stop_grace_period: 30s
     healthcheck:
       test:
         - CMD-SHELL
@@ -65,7 +67,7 @@ services:
       start_period: 10s
 
   kong:
-    image: ${KONG_IMAGE:?set immutable Kong image tag or digest}
+    image: ${KONG_IMAGE:?set immutable Kong image digest}
     depends_on:
       kong-config-render:
         condition: service_completed_successfully
@@ -91,12 +93,13 @@ services:
     restart: unless-stopped
     read_only: true
     tmpfs:
-      - /tmp:size=64m,noexec,nosuid
-      - /usr/local/kong:size=128m,nosuid
+      - /tmp:size=64m,noexec,nosuid,nodev
+      - /usr/local/kong:size=128m,nosuid,nodev
     security_opt:
       - no-new-privileges:true
     cap_drop: ["ALL"]
     pids_limit: 512
+    stop_grace_period: 30s
     healthcheck:
       test: ["CMD", "kong", "health"]
       interval: 15s
@@ -105,12 +108,13 @@ services:
       start_period: 20s
 
   caddy:
-    image: ${CADDY_IMAGE:?set immutable Caddy image tag or digest}
+    image: ${CADDY_IMAGE:?set immutable Caddy image digest}
     depends_on:
       kong:
         condition: service_healthy
     environment:
-      API_DOMAIN: ${API_DOMAIN:-api.codestra.co}
+      API_DOMAIN: ${API_DOMAIN:?verified API domain required}
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:?verified proxy CIDRs required}
     ports:
       - target: 80
         published: 80
@@ -134,12 +138,13 @@ services:
     restart: unless-stopped
     read_only: true
     tmpfs:
-      - /tmp:size=64m,noexec,nosuid
+      - /tmp:size=64m,noexec,nosuid,nodev
     security_opt:
       - no-new-privileges:true
     cap_drop: ["ALL"]
     cap_add: ["NET_BIND_SERVICE"]
     pids_limit: 256
+    stop_grace_period: 30s
     healthcheck:
       test: ["CMD", "caddy", "version"]
       interval: 30s
@@ -164,4 +169,4 @@ networks:
     internal: true
   freight_private:
     external: true
-    name: ${FREIGHT_BACKEND_NETWORK:-freight_private}
+    name: ${FREIGHT_BACKEND_NETWORK:?verified external network name required}
