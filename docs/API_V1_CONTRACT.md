@@ -7,7 +7,7 @@
 ```text
 service                 freight-platform-backend
 application version     shared by all backend entrypoints
-canonical migration     0006_identity_rbac_rls
+canonical migration     0007_document_storage
 authentication          OIDC bearer JWT
 human identity provider auth.codestra.co
 ```
@@ -228,17 +228,19 @@ GET  /api/v1/portals/carrier/settlements
 
 Customer and carrier public access remain disabled by default. Internal review and staging can exercise the workflows without enabling public portal capabilities.
 
-## Document pipeline status
+## Document pipeline
 
 ```text
 POST /api/v1/documents/upload-sessions
 POST /api/v1/documents/{document_id}/confirm
+GET  /api/v1/documents/{document_id}
+GET  /api/v1/documents/{document_id}/download
 GET  /api/v1/loads/{load_id}/documents
 POST /api/v1/loads/{load_id}/documents
 POST /api/v1/loads/{load_id}/pod
 ```
 
-Document reads are implemented. Upload, confirmation, attachment and POD writes intentionally return `503 STORAGE_NOT_CONFIGURED` until secure object storage, malware scanning, quarantine, content validation and retention controls are implemented on `be/documents-secure-storage-v1`.
+Document writes now use the version-bound S3 and ClamAV implementation described in `DOCUMENT_STORAGE.md`. Storage remains disabled by default (`503 STORAGE_NOT_CONFIGURED`). An upload session is load-scoped and requires a SHA-256 checksum, byte length and allowed content type. Confirmation verifies the immutable object version and scans its bytes before releasing it. Only clean documents may be downloaded or attached as POD. No browser session, storage bucket, scanner or external capability is provisioned by a source merge.
 
 ## Default-disabled capabilities
 

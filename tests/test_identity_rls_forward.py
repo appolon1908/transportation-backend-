@@ -32,8 +32,8 @@ TABLES = (Organization, Role, Membership, RolePermission, MembershipRole)
 
 def test_forward_revision_has_one_canonical_head_and_keeps_history():
     scripts = ScriptDirectory.from_config(Config(str(ROOT / "alembic.ini")))
-    assert scripts.get_heads() == ["0006_identity_rbac_rls"]
-    assert scripts.get_revision(CANONICAL_MIGRATION_HEAD).down_revision == "0005_portal_workflows"
+    assert scripts.get_heads() == [CANONICAL_MIGRATION_HEAD]
+    assert scripts.get_revision("0006_identity_rbac_rls").down_revision == "0005_portal_workflows"
     assert not (ROOT / "migrations/versions/0002b_identity_rbac_rls.py").exists()
     assert scripts.get_revision("0005_portal_workflows").down_revision == "0004_integration_rls_roles"
 
