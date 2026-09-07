@@ -25,12 +25,7 @@ def require_contract_environment(env: Mapping[str, str]) -> None:
 def main() -> None:
     require_contract_environment(os.environ)
     root = Path(__file__).resolve().parents[2]
-    subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], cwd=root, check=True)
-    subprocess.run(
-        [sys.executable, "-m", "alembic", "-c", "alembic-compliance.ini", "upgrade", "head"],
-        cwd=root,
-        check=True,
-    )
+    subprocess.run([sys.executable, "-m", "app.schema_upgrade"], cwd=root, check=True)
     print("DISPOSABLE_CONTRACT_SCHEMA=READY")
 
 

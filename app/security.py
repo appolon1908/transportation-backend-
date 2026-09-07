@@ -210,6 +210,11 @@ async def _load_local_actor(
     if principal.status != "ACTIVE":
         raise _auth_error("PRINCIPAL_DISABLED", "The local principal is disabled.", 403)
 
+    # Tenant selection is not authorization, but it must be installed before
+    # querying RLS-protected membership/RBAC tables. The following membership
+    # lookup remains authoritative and fails closed when no active grant exists.
+    await set_session_context(db, tenant_id, str(principal.id))
+
     membership = await db.scalar(
         select(Membership).where(
             Membership.tenant_id == tenant_id,

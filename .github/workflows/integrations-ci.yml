@@ -11,6 +11,7 @@ on:
       - "migrations/versions/0003_integrations_durability.py"
       - "migrations/versions/0004_integration_rls_roles.py"
       - "migrations/versions/0005_portal_workflows.py"
+      - "migrations/versions/0006_identity_rbac_rls.py"
       - "tests/test_integrations_contract.py"
       - "tests/test_release_readiness_contract.py"
       - "deploy/**"
@@ -93,6 +94,7 @@ jobs:
           workers/integration_worker.py migrations/versions/0003_integrations_durability.py
           migrations/versions/0004_integration_rls_roles.py
           migrations/versions/0005_portal_workflows.py
+          migrations/versions/0006_identity_rbac_rls.py
           tests/test_integrations_contract.py tests/test_release_readiness_contract.py
           scripts/deployment
 
@@ -118,13 +120,13 @@ jobs:
         run: |
           alembic upgrade head
           alembic current | tee /tmp/alembic-current.txt
-          grep -q "0005_portal_workflows" /tmp/alembic-current.txt
+          grep -q "0006_identity_rbac_rls" /tmp/alembic-current.txt
 
       - name: Verify integration security migrations are reversible
         run: |
           alembic downgrade 0003_integrations_durability
           alembic upgrade head
-          alembic current | grep -q "0005_portal_workflows"
+          alembic current | grep -q "0006_identity_rbac_rls"
 
       - name: Verify RLS roles and opaque webhook resolver
         env:

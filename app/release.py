@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-CANONICAL_MIGRATION_HEAD = "0005_portal_workflows"
+CANONICAL_MIGRATION_HEAD = "0006_identity_rbac_rls"
 BACKEND_SERVICE_NAME = "freight-platform-backend"
 INTEGRATION_SERVICE_NAME = "freight-platform-integrations"
 
