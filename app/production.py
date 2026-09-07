@@ -9,6 +9,7 @@ from app.config import get_settings
 from app.integrations.api import router as integration_router
 from app.integrations.health_api import router as integration_health_router
 from app.main import app as app
+from app.platform.orbit_api import router as orbit_contract_router
 from app.portals.admin_api import router as portal_admin_router
 from app.portals.carrier_api import router as carrier_portal_router
 from app.portals.customer_api import router as customer_portal_router
@@ -17,6 +18,7 @@ from app.portals.review_api import router as portal_review_router
 
 settings = get_settings()
 ROUTERS = (
+    orbit_contract_router,
     integration_health_router,
     integration_router,
     portal_admin_router,
