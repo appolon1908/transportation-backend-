@@ -1,0 +1,11 @@
+{
+  "exit_code": 2,
+  "output_tail": "\n==================================== ERRORS ====================================\n__________ ERROR collecting tests/test_compliance_gateway_contract.py __________\ntests/test_compliance_gateway_contract.py:8: in <module>\n    from app.production_v4 import app\napp/production_v4.py:12: in <module>\n    from app.production import app as app\napp/production.py:26: in <module>\n    if not any(route.path == sentinel_path for route in app.routes):\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\napp/production.py:26: in <genexpr>\n    if not any(route.path == sentinel_path for route in app.routes):\n               ^^^^^^^^^^\nE   AttributeError: '_IncludedRouter' object has no attribute 'path'\n=============================== warnings summary ===============================\n../../../../../opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/fastapi/testclient.py:1\n  /opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nERROR tests/test_compliance_gateway_contract.py - AttributeError: '_IncludedRouter' object has no attribute 'path'\n!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!\n1 warning, 1 error in 1.61s\n",
+  "summary_lines": [
+    "==================================== ERRORS ====================================",
+    "E   AttributeError: '_IncludedRouter' object has no attribute 'path'",
+    "=============================== warnings summary ===============================",
+    "=========================== short test summary info ============================",
+    "ERROR tests/test_compliance_gateway_contract.py - AttributeError: '_IncludedRouter' object has no attribute 'path'"
+  ]
+}

@@ -1,0 +1,164 @@
+name: secure-deployment-scaffold-ci
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/backend-release.yml"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/integrations-ci.yml"
+      - ".github/workflows/compliance-gateway-ci.yml"
+      - ".github/workflows/secure-deployment-scaffold-ci.yml"
+      - ".github/workflows/deployment-preflight.yml"
+      - "deploy/backend/**"
+      - "deploy/gateway/**"
+      - "deploy/runtime/**"
+      - "scripts/deployment/**"
+      - "docs/deployment/**"
+  push:
+    branches:
+      - "ops/secure-ci-deployment-scaffold-v1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: secure-deployment-scaffold-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-scaffold:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out exact source without persisted credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5, Node 24
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install reviewed Python runtime
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6, Node 24
+        with:
+          python-version: "3.12"
+
+      - name: Compile deployment validators
+        run: >-
+          python -m compileall -q
+          scripts/deployment/validate_runtime_manifest.py
+          scripts/deployment/validate_compose_security.py
+          scripts/deployment/verify_no_live_deploy_steps.py
+          scripts/deployment/validate_ci_supply_chain.py
+
+      - name: Validate the deliberately unverified runtime-path example
+        run: >-
+          python scripts/deployment/validate_runtime_manifest.py
+          --manifest deploy/runtime/runtime-paths.example.json
+          --expected-environment staging
+          --allow-unverified
+          --evidence /tmp/freight-scaffold/runtime-manifest-evidence.json
+
+      - name: Render deployment models with isolated non-secret placeholders
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/freight-scaffold
+          printf '%s\n' '# intentionally empty CI integration environment' > /tmp/freight-scaffold/integration.env
+          printf '%s' 'ci-gateway-proof-not-for-production' > /tmp/freight-scaffold/gateway-proof
+          printf '%s' 'ci-compliance-pepper-not-for-production' > /tmp/freight-scaffold/compliance-pepper
+          printf '%s' 'ci-redis-password-not-for-production' > /tmp/freight-scaffold/redis-password
+
+          export APP_VERSION=0.6.0
+          export MIGRATION_HEAD=0005_portal_workflows
+          export FREIGHT_BACKEND_IMAGE=ghcr.io/example/freight-platform-backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          export FREIGHT_BACKEND_NETWORK=freight_private
+          export MIGRATOR_DATABASE_URL=postgresql+asyncpg://freight_migrator:ci@database.invalid/freight
+          export DATABASE_URL=postgresql+asyncpg://freight_api:ci@database.invalid/freight
+          export INGRESS_DATABASE_URL=postgresql+asyncpg://freight_ingress:ci@database.invalid/freight
+          export WORKER_DATABASE_URL=postgresql+asyncpg://freight_worker:ci@database.invalid/freight
+          export ALLOWED_HOSTS=api.staging.example.invalid
+          export CORS_ORIGINS=https://app.staging.example.invalid
+          export OIDC_ISSUER=https://auth.example.invalid/realms/freight
+          export OIDC_AUDIENCE=freight-platform-api
+          export OIDC_JWKS_URL=https://auth.example.invalid/realms/freight/protocol/openid-connect/certs
+          export OIDC_ALLOWED_AZP=freight-platform-portal
+          export INTEGRATION_ALLOWED_HOSTS=odoo.internal.example,n8n.internal.example
+          export INTEGRATION_SECRETS_ENV_FILE=/tmp/freight-scaffold/integration.env
+          export GATEWAY_SHARED_SECRET_FILE=/tmp/freight-scaffold/gateway-proof
+          export COMPLIANCE_IDENTIFIER_PEPPER_FILE=/tmp/freight-scaffold/compliance-pepper
+          export FORWARDED_ALLOW_IPS=10.40.0.0/24
+          export TRUSTED_GATEWAY_CIDRS=10.40.0.0/24
+
+          docker compose -f deploy/backend/compose.v4.yaml config --format json \
+            > /tmp/freight-scaffold/backend-compose.json
+
+          export GATEWAY_RENDERER_IMAGE=ghcr.io/example/freight-gateway-renderer@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          export REDIS_IMAGE=redis@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+          export KONG_IMAGE=kong@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+          export CADDY_IMAGE=caddy@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+          export FRONTEND_ORIGIN=https://app.staging.example.invalid
+          export API_DOMAIN=api.staging.example.invalid
+          export TRUSTED_PROXY_CIDRS='10.40.0.0/24 127.0.0.1/32 ::1/128'
+          export KONG_REDIS_DATABASE=0
+          export KONG_REDIS_PASSWORD_FILE=/tmp/freight-scaffold/redis-password
+
+          docker compose -f deploy/gateway/compose.gateway.yaml config --format json \
+            > /tmp/freight-scaffold/gateway-compose.json
+
+      - name: Enforce rendered Compose security invariants
+        run: >-
+          python scripts/deployment/validate_compose_security.py
+          --backend /tmp/freight-scaffold/backend-compose.json
+          --gateway /tmp/freight-scaffold/gateway-compose.json
+          --evidence /tmp/freight-scaffold/compose-security-evidence.json
+
+      - name: Prove the preflight workflows contain no live-host operations
+        run: >-
+          python scripts/deployment/verify_no_live_deploy_steps.py
+          --preflight .github/workflows/deployment-preflight.yml
+          --scaffold-ci .github/workflows/secure-deployment-scaffold-ci.yml
+          --evidence /tmp/freight-scaffold/workflow-safety-evidence.json
+
+      - name: Validate CI action pins and release supply-chain controls
+        run: >-
+          python scripts/deployment/validate_ci_supply_chain.py
+          --workflow .github/workflows/ci.yml
+          --workflow .github/workflows/integrations-ci.yml
+          --workflow .github/workflows/compliance-gateway-ci.yml
+          --workflow .github/workflows/backend-release.yml
+          --workflow .github/workflows/secure-deployment-scaffold-ci.yml
+          --workflow .github/workflows/deployment-preflight.yml
+          --dockerfile deploy/backend/Dockerfile.v4
+          --pyproject pyproject.toml
+          --evidence /tmp/freight-scaffold/ci-supply-chain-evidence.json
+
+      - name: Write combined scaffold evidence
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path('/tmp/freight-scaffold')
+          evidence = {
+              'runtime_manifest': json.loads((root / 'runtime-manifest-evidence.json').read_text()),
+              'compose_security': json.loads((root / 'compose-security-evidence.json').read_text()),
+              'workflow_safety': json.loads((root / 'workflow-safety-evidence.json').read_text()),
+              'ci_supply_chain': json.loads((root / 'ci-supply-chain-evidence.json').read_text()),
+              'source_sha': '${{ github.sha }}',
+              'host_contacted': False,
+              'deployment_performed': False,
+              'live_capabilities_enabled': False,
+          }
+          (root / 'secure-deployment-scaffold-evidence.json').write_text(
+              json.dumps(evidence, indent=2, sort_keys=True) + '\n',
+              encoding='utf-8',
+          )
+          PY
+
+      - name: Upload non-secret scaffold evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6, Node 24
+        with:
+          name: secure-deployment-scaffold-evidence-${{ github.sha }}
+          path: /tmp/freight-scaffold/*-evidence.json
+          if-no-files-found: error
+          retention-days: 30

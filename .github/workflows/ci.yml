@@ -1,0 +1,149 @@
+name: backend-ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "be/release-readiness-v6"
+      - "be/api-contract-readiness-v1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5@sha256:5c88b8231230b803d74220c62b56a577085466fc5880be98a1ab8195249a7ebb
+        env:
+          POSTGRES_DB: freight
+          POSTGRES_USER: freight
+          POSTGRES_PASSWORD: freight
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U freight -d freight"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql+asyncpg://freight:freight@localhost:5432/freight
+      INGRESS_DATABASE_URL: postgresql+asyncpg://freight:freight@localhost:5432/freight
+      WORKER_DATABASE_URL: postgresql+asyncpg://freight:freight@localhost:5432/freight
+      ALLOW_DEVELOPMENT_IDENTITY_HEADERS: "true"
+      COMPLIANCE_IDENTIFIER_PEPPER: ci-only-pepper
+      OIDC_ISSUER: https://auth.example.test/realms/freight
+      OIDC_AUDIENCE: freight-api
+      INTEGRATION_ALLOWED_HOSTS: localhost,127.0.0.1,odoo.internal.example,n8n.internal.example
+
+    steps:
+      - name: Check out source without persisted credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5, Node 24
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install reviewed Python runtime
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6, Node 24
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[dev]" pyyaml
+
+      - name: Ruff
+        run: ruff check app tests migrations compliance_migrations scripts workers
+
+      - name: Python syntax
+        run: python -m compileall -q app migrations compliance_migrations tests scripts workers
+
+      - name: Migrate empty database to canonical head
+        run: alembic upgrade head
+
+      - name: Assert canonical migration head
+        run: test "$(alembic heads | awk '{print $1}')" = "0005_portal_workflows"
+
+      - name: Validate database role and RLS contracts
+        env:
+          PGPASSWORD: freight
+        run: |
+          psql -h localhost -U freight -d freight -v ON_ERROR_STOP=1 <<'SQL'
+          SELECT rolname, rolbypassrls, rolsuper
+          FROM pg_roles
+          WHERE rolname IN ('freight_api', 'freight_ingress', 'freight_worker')
+          ORDER BY rolname;
+
+          DO $block$
+          DECLARE
+              role_count integer;
+              forced_count integer;
+          BEGIN
+              SELECT count(*) INTO role_count
+              FROM pg_roles
+              WHERE rolname IN ('freight_api', 'freight_ingress', 'freight_worker')
+                AND NOT rolbypassrls
+                AND NOT rolsuper;
+              IF role_count <> 3 THEN
+                  RAISE EXCEPTION 'least-privilege database roles are missing or unsafe';
+              END IF;
+
+              SELECT count(*) INTO forced_count
+              FROM pg_class
+              WHERE relname IN (
+                  'integration_connections',
+                  'integration_webhook_keys',
+                  'integration_deliveries',
+                  'integration_delivery_attempts',
+                  'integration_inbox_messages',
+                  'integration_command_requests',
+                  'integration_provenance_entries',
+                  'portal_principal_bindings',
+                  'portal_claim_submissions',
+                  'portal_access_audit',
+                  'portal_tracking_submissions',
+                  'portal_carrier_evidence_submissions'
+              ) AND relrowsecurity AND relforcerowsecurity;
+              IF forced_count <> 12 THEN
+                  RAISE EXCEPTION 'expected 12 FORCE RLS tables, found %', forced_count;
+              END IF;
+          END;
+          $block$;
+          SQL
+
+      - name: Apply carrier compliance schema
+        run: alembic -c alembic-compliance.ini upgrade head
+
+      - name: Tests
+        run: pytest -q
+
+      - name: Production OpenAPI smoke
+        run: |
+          python - <<'PY'
+          from app.production_v4 import app
+
+          paths = set(app.openapi()["paths"])
+          required = {
+              "/api/v1/admin/integrations/health",
+              "/api/v1/admin/portal-bindings",
+              "/api/v1/admin/portal-reviews/claims",
+              "/api/v1/operations/control-tower",
+              "/api/v1/portals/customer/context",
+              "/api/v1/portals/customer/quotes/{quote_id}/decision",
+              "/api/v1/portals/carrier/context",
+              "/api/v1/portals/carrier/tenders/{tender_id}/response",
+              "/api/v1/portals/carrier/loads/{load_id}/tracking",
+          }
+          missing = required - paths
+          assert not missing, missing
+          print({"path_count": len(paths), "required_portal_paths": len(required)})
+          PY

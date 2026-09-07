@@ -1,0 +1,66 @@
+{
+	admin off
+	servers {
+		trusted_proxies static {$TRUSTED_PROXY_CIDRS}
+		client_ip_headers X-Forwarded-For X-Real-IP
+	}
+	log {
+		output stdout
+		format json
+		level INFO
+	}
+}
+
+(freight_proxy) {
+	reverse_proxy kong:8000 {
+		header_up X-Forwarded-Proto https
+		header_up X-Forwarded-Host {host}
+		header_up X-Real-IP {client_ip}
+		health_uri /health/live
+		health_interval 15s
+		health_timeout 3s
+		transport http {
+			keepalive 30s
+			keepalive_idle_conns 100
+			keepalive_idle_conns_per_host 32
+			response_header_timeout 60s
+		}
+	}
+}
+
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		-Server
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Cross-Origin-Resource-Policy "same-site"
+	}
+
+	@webhooks {
+		method POST
+		path /api/v1/integrations/*/webhooks/* /api/v1/integrations/tracking/*/webhooks
+	}
+	handle @webhooks {
+		request_body {
+			max_size 1MB
+		}
+		import freight_proxy
+	}
+
+	handle {
+		request_body {
+			max_size 2MB
+		}
+		import freight_proxy
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

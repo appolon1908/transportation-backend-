@@ -1,0 +1,265 @@
+name: compliance-gateway-ci
+
+on:
+  pull_request:
+    paths:
+      - "app/compliance/**"
+      - "app/gateway/**"
+      - "app/production.py"
+      - "app/production_v4.py"
+      - "app/portals/**"
+      - "migrations/**"
+      - "compliance_migrations/**"
+      - "alembic-compliance.ini"
+      - "deploy/backend/**"
+      - "deploy/gateway/**"
+      - "deploy/runtime/**"
+      - "scripts/deployment/**"
+      - "tests/test_compliance_gateway_contract.py"
+      - "tests/test_integrations_contract.py"
+      - "tests/test_release_readiness_contract.py"
+      - ".github/workflows/compliance-gateway-ci.yml"
+  push:
+    branches:
+      - "be/compliance-gateway-production-v4"
+      - "be/release-readiness-v6"
+      - "be/api-contract-readiness-v1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compliance-gateway-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compliance-and-gateway-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5@sha256:5c88b8231230b803d74220c62b56a577085466fc5880be98a1ab8195249a7ebb
+        env:
+          POSTGRES_USER: freight
+          POSTGRES_PASSWORD: freight
+          POSTGRES_DB: freight
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U freight -d freight"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql+asyncpg://freight:freight@127.0.0.1:5432/freight
+      INGRESS_DATABASE_URL: postgresql+asyncpg://freight:freight@127.0.0.1:5432/freight
+      WORKER_DATABASE_URL: postgresql+asyncpg://freight:freight@127.0.0.1:5432/freight
+      ALLOW_DEVELOPMENT_IDENTITY_HEADERS: "true"
+      OIDC_ISSUER: https://auth.codestra.co/realms/codestra
+      OIDC_AUDIENCE: freight-platform-api
+      OIDC_JWKS_URL: https://auth.codestra.co/realms/codestra/protocol/openid-connect/certs
+      INTEGRATION_ALLOWED_HOSTS: n8n.internal.example,odoo.internal.example
+      COMPLIANCE_IDENTIFIER_PEPPER: ci-only-pepper
+      PYTHONPATH: .
+
+    steps:
+      - name: Check out source without persisted credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5, Node 24
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install reviewed Python runtime
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6, Node 24
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package and validation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" pyyaml
+
+      - name: Compile hardened runtime and deployment validators
+        run: >-
+          python -m compileall -q
+          app/compliance app/gateway app/portals app/production.py app/production_v4.py
+          migrations compliance_migrations workers scripts/deployment
+          tests/test_integrations_contract.py tests/test_compliance_gateway_contract.py
+
+      - name: Lint hardened runtime and deployment validators
+        run: >-
+          ruff check
+          app/compliance app/gateway app/portals app/production.py app/production_v4.py
+          migrations compliance_migrations workers scripts/deployment
+          tests/test_integrations_contract.py tests/test_compliance_gateway_contract.py
+
+      - name: Apply canonical core schema
+        run: alembic upgrade head
+
+      - name: Assert canonical core migration head
+        run: test "$(alembic heads | awk '{print $1}')" = "0005_portal_workflows"
+
+      - name: Apply carrier compliance schema and database triggers
+        run: alembic -c alembic-compliance.ini upgrade head
+
+      - name: Assert compliance migration head SQL functions and RLS
+        env:
+          PGPASSWORD: freight
+        run: |
+          test "$(alembic -c alembic-compliance.ini heads | awk '{print $1}')" = "0001_carrier_readiness"
+          psql -h 127.0.0.1 -U freight -d freight -v ON_ERROR_STOP=1 <<'SQL'
+          DO $block$
+          DECLARE
+              compliance_rls_count integer;
+          BEGIN
+              IF to_regprocedure('freight_carrier_readiness(uuid,uuid,text)') IS NULL THEN
+                  RAISE EXCEPTION 'readiness function missing';
+              END IF;
+              IF to_regprocedure('enforce_freight_carrier_readiness()') IS NULL THEN
+                  RAISE EXCEPTION 'readiness enforcement function missing';
+              END IF;
+              SELECT count(*) INTO compliance_rls_count
+              FROM pg_class
+              WHERE relname IN (
+                  'carrier_compliance_policies',
+                  'carrier_authority_records',
+                  'carrier_insurance_records',
+                  'carrier_safety_records',
+                  'carrier_compliance_overrides',
+                  'carrier_readiness_decisions'
+              ) AND relrowsecurity AND relforcerowsecurity;
+              IF compliance_rls_count <> 6 THEN
+                  RAISE EXCEPTION 'expected 6 FORCE RLS compliance tables, found %', compliance_rls_count;
+              END IF;
+          END;
+          $block$;
+          SQL
+
+      - name: Run integration compliance and gateway contracts
+        run: pytest -q tests/test_integrations_contract.py tests/test_compliance_gateway_contract.py
+
+      - name: Verify hardened production OpenAPI
+        run: |
+          python - <<'PY'
+          from app.production_v4 import app
+
+          schema = app.openapi()
+          required = {
+              "/api/v1/admin/integrations/health",
+              "/api/v1/integrations/{webhook_slug}/webhooks/{provider}",
+              "/api/v1/admin/compliance/policies",
+              "/api/v1/carriers/{carrier_id}/readiness/evaluate",
+              "/api/v1/admin/portal-bindings",
+              "/api/v1/operations/control-tower",
+              "/api/v1/portals/customer/context",
+              "/api/v1/portals/carrier/context",
+          }
+          missing = required - set(schema["paths"])
+          assert not missing, missing
+          print({"hardened_path_count": len(schema["paths"])})
+          PY
+
+      - name: Render and parse DB-less Kong configuration
+        run: |
+          mkdir -p /tmp/freight-gateway
+          printf '%s' 'ci-gateway-proof-not-for-production' > /tmp/freight-gateway/gateway-proof
+          printf '%s' 'ci-redis-password-not-for-production' > /tmp/freight-gateway/redis-password
+          FRONTEND_ORIGIN=https://app.example.test \
+          KONG_REDIS_HOST=redis \
+          KONG_REDIS_PORT=6379 \
+          KONG_REDIS_DATABASE=0 \
+          GATEWAY_SHARED_SECRET_FILE=/tmp/freight-gateway/gateway-proof \
+          KONG_REDIS_PASSWORD_FILE=/tmp/freight-gateway/redis-password \
+          python deploy/gateway/render_config_v2.py \
+            deploy/gateway/kong.yml.template /tmp/freight-gateway/kong.yml
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          path = Path('/tmp/freight-gateway/kong.yml')
+          content = path.read_text(encoding='utf-8')
+          parsed = yaml.safe_load(content)
+          assert parsed['_format_version'] == '3.0'
+          assert parsed['services']
+          assert '${' not in content
+          routes = {
+              route['name']: route
+              for service in parsed['services']
+              for route in service.get('routes', [])
+          }
+          webhook = routes['freight-inbound-webhooks']
+          assert webhook['methods'] == ['POST']
+          assert webhook['paths'] == [
+              '~/api/v1/integrations/[^/]+/webhooks/[^/]+$',
+              '~/api/v1/integrations/tracking/[^/]+/webhooks$',
+          ]
+          print('Kong YAML syntax, placeholders, and signed-webhook prefix verified')
+          PY
+
+      - name: Validate Kong declarative schema with a digest-pinned image
+        run: >-
+          docker run --rm
+          -e KONG_DATABASE=off
+          -e KONG_DECLARATIVE_CONFIG=/tmp/kong.yml
+          -v /tmp/freight-gateway/kong.yml:/tmp/kong.yml:ro
+          kong:3.9.3@sha256:8a639948bf940868c8b4bed32fccc53d27fdd5766dbc8702b65cacbec48dcfd0
+          kong config parse /tmp/kong.yml
+
+      - name: Validate Caddy configuration with a digest-pinned image
+        run: >-
+          docker run --rm
+          -e API_DOMAIN=api.example.test
+          -e "TRUSTED_PROXY_CIDRS=10.40.0.0/24 127.0.0.1/32 ::1/128"
+          -v "$PWD/deploy/gateway/Caddyfile:/etc/caddy/Caddyfile:ro"
+          caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+          caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+      - name: Render and validate production Compose models
+        run: |
+          printf '%s\n' '# intentionally empty validation environment' > /tmp/freight-gateway/integration.env
+          printf '%s' 'ci-compliance-pepper-not-for-production' > /tmp/freight-gateway/compliance-pepper
+
+          export APP_VERSION=0.6.0
+          export MIGRATION_HEAD=0005_portal_workflows
+          export FREIGHT_BACKEND_IMAGE=ghcr.io/example/freight-platform-backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          export FREIGHT_BACKEND_NETWORK=freight_private
+          export MIGRATOR_DATABASE_URL=postgresql+asyncpg://freight_migrator:ci@database.invalid/freight
+          export DATABASE_URL=postgresql+asyncpg://freight_api:ci@database.invalid/freight
+          export INGRESS_DATABASE_URL=postgresql+asyncpg://freight_ingress:ci@database.invalid/freight
+          export WORKER_DATABASE_URL=postgresql+asyncpg://freight_worker:ci@database.invalid/freight
+          export ALLOWED_HOSTS=api.example.test
+          export CORS_ORIGINS=https://app.example.test
+          export OIDC_ISSUER=https://auth.example.test/realms/freight
+          export OIDC_AUDIENCE=freight-platform-api
+          export OIDC_JWKS_URL=https://auth.example.test/realms/freight/protocol/openid-connect/certs
+          export OIDC_ALLOWED_AZP=freight-platform-portal
+          export INTEGRATION_ALLOWED_HOSTS=n8n.internal.example,odoo.internal.example
+          export FORWARDED_ALLOW_IPS=10.40.0.0/24
+          export TRUSTED_GATEWAY_CIDRS=10.40.0.0/24
+          export GATEWAY_SHARED_SECRET_FILE=/tmp/freight-gateway/gateway-proof
+          export COMPLIANCE_IDENTIFIER_PEPPER_FILE=/tmp/freight-gateway/compliance-pepper
+          export INTEGRATION_SECRETS_ENV_FILE=/tmp/freight-gateway/integration.env
+
+          docker compose -f deploy/backend/compose.v4.yaml config --format json \
+            > /tmp/freight-gateway/backend-compose.json
+
+          export GATEWAY_RENDERER_IMAGE=ghcr.io/example/freight-gateway-renderer@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          export REDIS_IMAGE=redis:7.4.11-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+          export KONG_IMAGE=kong:3.9.3@sha256:8a639948bf940868c8b4bed32fccc53d27fdd5766dbc8702b65cacbec48dcfd0
+          export CADDY_IMAGE=caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+          export FRONTEND_ORIGIN=https://app.example.test
+          export API_DOMAIN=api.example.test
+          export TRUSTED_PROXY_CIDRS='10.40.0.0/24 127.0.0.1/32 ::1/128'
+          export KONG_REDIS_DATABASE=0
+          export KONG_REDIS_PASSWORD_FILE=/tmp/freight-gateway/redis-password
+
+          docker compose -f deploy/gateway/compose.gateway.yaml config --format json \
+            > /tmp/freight-gateway/gateway-compose.json
+
+          python scripts/deployment/validate_compose_security.py \
+            --backend /tmp/freight-gateway/backend-compose.json \
+            --gateway /tmp/freight-gateway/gateway-compose.json \
+            --evidence /tmp/freight-gateway/compose-security-evidence.json

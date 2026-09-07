@@ -190,26 +190,30 @@ def requirement_file(directory: Path) -> Path | None:
 
 
 def run_python_project(directory: Path, mode: str, branch: str) -> None:
-    venv = directory / ".venv-ci"
+    runner_root = Path(os.environ.get("RUNNER_TEMP", "/tmp")).resolve()
+    key = hashlib.sha256(str(directory.resolve()).encode("utf-8")).hexdigest()[:12]
+    venv = runner_root / f"codestra-ci-venv-{key}"
     shutil.rmtree(venv, ignore_errors=True)
     run([sys.executable, "-m", "venv", str(venv)], cwd=directory)
     python = venv / "bin" / "python"
-    run([str(python), "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "--upgrade", "pip"], cwd=directory)
-    requirements = requirement_file(directory)
-    if requirements is not None:
-        if mode == "release" and branch in RELEASE_BRANCHES and requirements.name != "requirements.lock":
-            print(f"WARNING=release uses {requirements.name}; add requirements.lock for full reproducibility")
-        run([str(python), "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "-r", requirements.name], cwd=directory, timeout=1800)
-    elif (directory / "pyproject.toml").is_file():
-        run([str(python), "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "-e", "."], cwd=directory, timeout=1800)
-    env = dict(os.environ)
-    env.update({"PYTHONDONTWRITEBYTECODE": "1", "PYTHONUNBUFFERED": "1"})
-    run([str(python), "-m", "compileall", "-q", "."], cwd=directory, env=env)
-    if (directory / "tests").is_dir():
-        run([str(python), "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "pytest==8.4.2"], cwd=directory)
-        run([str(python), "-m", "pytest", "-q"], cwd=directory, env=env, timeout=1800)
-    run([str(python), "-m", "pip", "check"], cwd=directory, env=env)
-    shutil.rmtree(venv, ignore_errors=True)
+    try:
+        run([str(python), "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "--upgrade", "pip"], cwd=directory)
+        requirements = requirement_file(directory)
+        if requirements is not None:
+            if mode == "release" and branch in RELEASE_BRANCHES and requirements.name != "requirements.lock":
+                print(f"WARNING=release uses {requirements.name}; add requirements.lock for full reproducibility")
+            run([str(python), "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "-r", requirements.name], cwd=directory, timeout=1800)
+        elif (directory / "pyproject.toml").is_file():
+            run([str(python), "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "-e", "."], cwd=directory, timeout=1800)
+        env = dict(os.environ)
+        env.update({"PYTHONDONTWRITEBYTECODE": "1", "PYTHONUNBUFFERED": "1"})
+        run([str(python), "-m", "compileall", "-q", "."], cwd=directory, env=env)
+        if (directory / "tests").is_dir():
+            run([str(python), "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "pytest==8.4.2"], cwd=directory)
+            run([str(python), "-m", "pytest", "-q"], cwd=directory, env=env, timeout=1800)
+        run([str(python), "-m", "pip", "check"], cwd=directory, env=env)
+    finally:
+        shutil.rmtree(venv, ignore_errors=True)
 
 
 def run_compose_checks(root: Path) -> None:

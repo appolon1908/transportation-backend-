@@ -1,0 +1,152 @@
+_format_version: "3.0"
+_transform: true
+
+services:
+  - name: freight-platform-api
+    url: http://freight-api:8000
+    connect_timeout: 5000
+    read_timeout: 60000
+    write_timeout: 60000
+    retries: 2
+    routes:
+      - name: freight-health
+        paths:
+          - /health
+        strip_path: false
+        preserve_host: true
+        protocols: [http, https]
+        plugins:
+          - name: rate-limiting
+            config:
+              second: 5
+              minute: 60
+              policy: redis
+              redis_host: ${KONG_REDIS_HOST}
+              redis_port: ${KONG_REDIS_PORT}
+              redis_password: ${KONG_REDIS_PASSWORD}
+              redis_database: ${KONG_REDIS_DATABASE}
+              fault_tolerant: false
+              hide_client_headers: false
+
+      - name: freight-inbound-webhooks
+        methods: [POST]
+        paths:
+          - ~/api/v1/integrations/[^/]+/webhooks/[^/]+$
+          - ~/api/v1/integrations/tracking/[^/]+/webhooks$
+        strip_path: false
+        preserve_host: true
+        protocols: [http, https]
+        plugins:
+          - name: request-size-limiting
+            config:
+              allowed_payload_size: 1
+              size_unit: megabytes
+              require_content_length: true
+          - name: rate-limiting
+            config:
+              second: 10
+              minute: 120
+              policy: redis
+              redis_host: ${KONG_REDIS_HOST}
+              redis_port: ${KONG_REDIS_PORT}
+              redis_password: ${KONG_REDIS_PASSWORD}
+              redis_database: ${KONG_REDIS_DATABASE}
+              fault_tolerant: false
+              hide_client_headers: false
+
+      - name: freight-admin-api
+        paths:
+          - /api/v1/admin
+        strip_path: false
+        preserve_host: true
+        protocols: [http, https]
+        plugins:
+          - name: request-size-limiting
+            config:
+              allowed_payload_size: 2
+              size_unit: megabytes
+              require_content_length: true
+          - name: rate-limiting
+            config:
+              second: 5
+              minute: 120
+              policy: redis
+              redis_host: ${KONG_REDIS_HOST}
+              redis_port: ${KONG_REDIS_PORT}
+              redis_password: ${KONG_REDIS_PASSWORD}
+              redis_database: ${KONG_REDIS_DATABASE}
+              fault_tolerant: false
+              hide_client_headers: false
+          - name: cors
+            config:
+              origins:
+                - ${FRONTEND_ORIGIN}
+              methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+              headers: [Authorization, Content-Type, Idempotency-Key, If-Match, X-Correlation-Id]
+              exposed_headers: [ETag, X-Correlation-Id, X-RateLimit-Limit-Minute, X-RateLimit-Remaining-Minute]
+              credentials: true
+              max_age: 3600
+
+      - name: freight-api
+        paths:
+          - /api
+        strip_path: false
+        preserve_host: true
+        protocols: [http, https]
+        plugins:
+          - name: request-size-limiting
+            config:
+              allowed_payload_size: 2
+              size_unit: megabytes
+              require_content_length: true
+          - name: rate-limiting
+            config:
+              second: 20
+              minute: 600
+              policy: redis
+              redis_host: ${KONG_REDIS_HOST}
+              redis_port: ${KONG_REDIS_PORT}
+              redis_password: ${KONG_REDIS_PASSWORD}
+              redis_database: ${KONG_REDIS_DATABASE}
+              fault_tolerant: false
+              hide_client_headers: false
+          - name: cors
+            config:
+              origins:
+                - ${FRONTEND_ORIGIN}
+              methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+              headers: [Authorization, Content-Type, Idempotency-Key, If-Match, X-Correlation-Id]
+              exposed_headers: [ETag, X-Correlation-Id, X-RateLimit-Limit-Minute, X-RateLimit-Remaining-Minute]
+              credentials: true
+              max_age: 3600
+
+plugins:
+  - name: correlation-id
+    config:
+      header_name: X-Correlation-Id
+      generator: uuid
+      echo_downstream: true
+
+  - name: request-transformer
+    config:
+      remove:
+        headers:
+          - X-Freight-Gateway-Proof
+          - X-Tenant-ID
+          - X-Organization-ID
+          - X-Actor-ID
+          - X-Actor-Roles
+          - X-Permissions
+          - X-User-ID
+          - X-Forwarded-User
+      add:
+        headers:
+          - X-Freight-Gateway-Proof:${GATEWAY_SHARED_SECRET}
+
+  - name: prometheus
+    config:
+      per_consumer: false
+      status_code_metrics: true
+      latency_metrics: true
+      bandwidth_metrics: true
+      upstream_health_metrics: true

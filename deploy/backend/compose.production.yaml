@@ -1,0 +1,64 @@
+name: freight-platform-backend
+
+x-backend-image: &backend-image ghcr.io/appolon1908-hue/freight-platform-backend:${IMAGE_TAG:?set IMAGE_TAG to an immutable tag or digest}
+x-backend-env: &backend-env
+  ENVIRONMENT: production
+  DATABASE_URL: ${DATABASE_URL:?required}
+  OIDC_ISSUER: ${OIDC_ISSUER:?required}
+  OIDC_AUDIENCE: ${OIDC_AUDIENCE:?required}
+  OIDC_JWKS_URL: ${OIDC_JWKS_URL:?required}
+  INTEGRATION_ALLOWED_HOSTS: ${INTEGRATION_ALLOWED_HOSTS:?required}
+
+services:
+  migrate:
+    image: *backend-image
+    command: ["migrate"]
+    environment:
+      <<: *backend-env
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+
+  api:
+    image: *backend-image
+    command: ["api"]
+    environment:
+      <<: *backend-env
+      PORT: "8000"
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:?required}
+    expose: ["8000"]
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2)"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+
+  integration-worker:
+    image: *backend-image
+    command: ["worker"]
+    environment:
+      <<: *backend-env
+      WORKER_DATABASE_URL: ${WORKER_DATABASE_URL:?dedicated BYPASSRLS worker role required}
+      WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-2}
+      DELIVERY_CONCURRENCY: ${DELIVERY_CONCURRENCY:-8}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    pids_limit: 256

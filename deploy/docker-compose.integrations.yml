@@ -1,0 +1,76 @@
+services:
+  freight-integrations-api:
+    image: "${FREIGHT_BACKEND_IMAGE:?Set an immutable image reference including @sha256 digest}"
+    command:
+      - uvicorn
+      - app.integrations_main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8081"
+      - --proxy-headers
+      - --forwarded-allow-ips
+      - "${TRUSTED_PROXY_IPS:-10.40.0.1}"
+    restart: unless-stopped
+    read_only: true
+    user: "10001:10001"
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    env_file:
+      - "${FREIGHT_ENV_FILE:-/etc/freight-platform/integrations.env}"
+    environment:
+      ENVIRONMENT: production
+      MIGRATION_HEAD: 0005_portal_workflows
+    expose:
+      - "8081"
+    networks:
+      - freight_private
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health/ready', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  freight-integrations-worker:
+    image: "${FREIGHT_BACKEND_IMAGE:?Set an immutable image reference including @sha256 digest}"
+    command: ["python", "-m", "workers.integration_worker", "--mode", "all"]
+    restart: unless-stopped
+    read_only: true
+    user: "10001:10001"
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 45s
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    env_file:
+      - "${FREIGHT_ENV_FILE:-/etc/freight-platform/integrations.env}"
+    environment:
+      ENVIRONMENT: production
+      MIGRATION_HEAD: 0005_portal_workflows
+    networks:
+      - freight_private
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; assert os.getenv('WORKER_DATABASE_URL'); assert os.getenv('INTEGRATION_ALLOWED_HOSTS')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+networks:
+  freight_private:
+    external: true
+    name: "${FREIGHT_PRIVATE_NETWORK:-freight_private}"

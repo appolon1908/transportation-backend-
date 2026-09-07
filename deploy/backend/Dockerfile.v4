@@ -1,0 +1,62 @@
+# syntax=docker/dockerfile:1.7
+# The release workflow must provide a digest-pinned value such as:
+# python:3.12-slim-bookworm@sha256:<verified-manifest-digest>
+ARG PYTHON_BASE_IMAGE
+FROM ${PYTHON_BASE_IMAGE} AS builder
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+WORKDIR /build
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
+
+COPY pyproject.toml README.md ./
+COPY app ./app
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --upgrade pip setuptools wheel \
+    && python -m pip install .
+
+FROM ${PYTHON_BASE_IMAGE} AS runtime
+
+ARG VCS_REF=unknown
+ARG BUILD_DATE=unknown
+ARG VERSION=0.1.0
+
+LABEL org.opencontainers.image.title="freight-platform-backend" \
+      org.opencontainers.image.description="Multi-tenant freight platform API and durable workers" \
+      org.opencontainers.image.source="https://github.com/appolon1908-hue/transportation-backend-" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.version="${VERSION}"
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONHASHSEED=random \
+    PATH="/opt/venv/bin:${PATH}" \
+    PORT=8000
+
+RUN groupadd --system --gid 10001 freight \
+    && useradd --system --uid 10001 --gid freight --home-dir /srv/freight freight
+
+WORKDIR /srv/freight
+COPY --from=builder /opt/venv /opt/venv
+COPY --chown=freight:freight app ./app
+COPY --chown=freight:freight workers ./workers
+COPY --chown=freight:freight migrations ./migrations
+COPY --chown=freight:freight compliance_migrations ./compliance_migrations
+COPY --chown=freight:freight alembic.ini alembic-compliance.ini ./
+COPY --chown=freight:freight deploy/backend/entrypoint-v4.sh /usr/local/bin/freight-entrypoint
+RUN chmod 0555 /usr/local/bin/freight-entrypoint \
+    && find /srv/freight -type d -exec chmod 0555 {} + \
+    && find /srv/freight -type f -exec chmod 0444 {} +
+
+USER 10001:10001
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2)" || exit 1
+
+ENTRYPOINT ["freight-entrypoint"]
+CMD ["api"]
