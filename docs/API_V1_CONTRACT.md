@@ -7,7 +7,7 @@
 ```text
 service                 freight-platform-backend
 application version     shared by all backend entrypoints
-canonical migration     0007_document_storage
+canonical migration     0008_document_verification_lease
 authentication          OIDC bearer JWT
 human identity provider auth.codestra.co
 ```

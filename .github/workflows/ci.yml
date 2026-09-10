@@ -71,7 +71,7 @@ jobs:
         run: python -m app.schema_upgrade
 
       - name: Assert canonical migration head
-        run: test "$(alembic heads | awk '{print $1}')" = "0007_document_storage"
+        run: test "$(alembic heads | awk '{print $1}')" = "0008_document_verification_lease"
 
       - name: Validate database role and RLS contracts
         env:

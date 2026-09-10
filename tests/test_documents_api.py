@@ -242,3 +242,89 @@ async def test_unbound_portal_actor_cannot_use_generic_document_routes(monkeypat
     with pytest.raises(HTTPException) as denied:
         await api.authorized_load(SimpleNamespace(scalar=scalar), actor, uuid4())
     assert denied.value.status_code == 403
+
+
+@pytest.mark.skipif(not DB, reason="requires disposable PostgreSQL")
+def test_scanning_releases_request_transaction_and_commits_claim(fixture):
+    from app.db import get_db
+    f = fixture
+    sessions = []
+
+    async def tracked_db():
+        async with SessionLocal() as session:
+            sessions.append(session)
+            yield session
+            if session.in_transaction():
+                await session.rollback()
+
+    async def scan(data):
+        assert all(not session.in_transaction() for session in sessions)
+        async with SessionLocal() as session:
+            await set_session_context(session, f.tenant, "verify-claim")
+            doc = await session.scalar(select(Document).where(Document.load_id == f.load).with_for_update(nowait=True))
+            assert doc.status == "VERIFYING"
+            obj = await session.get(DocumentObject, doc.id)
+            assert obj.verification_token is not None
+            assert obj.verification_expires_at > datetime.now(timezone.utc)
+        return "CLEAN"
+
+    f.scanner.scan = scan
+    app.dependency_overrides[get_db] = tracked_db
+    try:
+        doc = create(f)
+        result = confirm(f, doc, "claim-test")
+        assert result.status_code == 200, result.text
+        assert result.json()["status"] == "AVAILABLE"
+        assert confirm(f, doc, "claim-test").json() == result.json()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.mark.skipif(not DB, reason="requires disposable PostgreSQL")
+def test_expired_verification_claim_can_be_retried(fixture):
+    f = fixture
+    doc = create(f)
+
+    async def abandoned_claim():
+        async with SessionLocal() as session:
+            await set_session_context(session, f.tenant, "abandoned-claim")
+            item = await session.get(Document, UUID(doc["id"]))
+            obj = await session.get(DocumentObject, item.id)
+            item.status = "VERIFYING"
+            obj.verification_token = uuid4()
+            obj.verification_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+            await session.commit()
+
+    asyncio.run(abandoned_claim())
+    result = confirm(f, doc)
+    assert result.status_code == 200, result.text
+    assert result.json()["status"] == "AVAILABLE"
+
+
+@pytest.mark.skipif(not DB, reason="requires disposable PostgreSQL")
+def test_replaced_claim_cannot_publish_or_clear_the_new_claim(fixture):
+    f = fixture
+    doc = create(f)
+    replacement = uuid4()
+
+    async def scan(data):
+        async with SessionLocal() as session:
+            await set_session_context(session, f.tenant, "replacement-claim")
+            obj = await session.get(DocumentObject, UUID(doc["id"]))
+            obj.verification_token = replacement
+            obj.verification_expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+            await session.commit()
+        return "CLEAN"
+
+    f.scanner.scan = scan
+    assert confirm(f, doc).status_code == 409
+
+    async def check():
+        async with SessionLocal() as session:
+            await set_session_context(session, f.tenant, "check-claim")
+            item = await session.get(Document, UUID(doc["id"]))
+            obj = await session.get(DocumentObject, item.id)
+            assert item.status == "VERIFYING"
+            assert obj.verification_token == replacement
+            assert obj.verified_at is None
+    asyncio.run(check())

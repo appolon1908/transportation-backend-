@@ -13,6 +13,7 @@ on:
       - "migrations/versions/0005_portal_workflows.py"
       - "migrations/versions/0006_identity_rbac_rls.py"
       - "migrations/versions/0007_document_storage.py"
+      - "migrations/versions/0008_document_verification_lease.py"
       - "tests/test_integrations_contract.py"
       - "tests/test_release_readiness_contract.py"
       - "deploy/**"
@@ -97,6 +98,7 @@ jobs:
           migrations/versions/0005_portal_workflows.py
           migrations/versions/0006_identity_rbac_rls.py
           migrations/versions/0007_document_storage.py
+          migrations/versions/0008_document_verification_lease.py
           tests/test_integrations_contract.py tests/test_release_readiness_contract.py
           scripts/deployment
 
@@ -122,13 +124,13 @@ jobs:
         run: |
           alembic upgrade head
           alembic current | tee /tmp/alembic-current.txt
-          grep -q "0007_document_storage" /tmp/alembic-current.txt
+          grep -q "0008_document_verification_lease" /tmp/alembic-current.txt
 
       - name: Verify integration security migrations are reversible
         run: |
           alembic downgrade 0003_integrations_durability
           alembic upgrade head
-          alembic current | grep -q "0007_document_storage"
+          alembic current | grep -q "0008_document_verification_lease"
 
       - name: Verify RLS roles and opaque webhook resolver
         env:

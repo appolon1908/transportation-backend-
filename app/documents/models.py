@@ -24,3 +24,5 @@ class DocumentObject(Base):
     retain_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     rejection_code: Mapped[str | None] = mapped_column(String(80))
+    verification_token: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    verification_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

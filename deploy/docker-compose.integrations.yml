@@ -23,7 +23,7 @@ services:
       - "${FREIGHT_ENV_FILE:-/etc/freight-platform/integrations.env}"
     environment:
       ENVIRONMENT: production
-      MIGRATION_HEAD: 0007_document_storage
+      MIGRATION_HEAD: 0008_document_verification_lease
     expose:
       - "8081"
     networks:
@@ -56,7 +56,7 @@ services:
       - "${FREIGHT_ENV_FILE:-/etc/freight-platform/integrations.env}"
     environment:
       ENVIRONMENT: production
-      MIGRATION_HEAD: 0007_document_storage
+      MIGRATION_HEAD: 0008_document_verification_lease
     networks:
       - freight_private
     healthcheck:

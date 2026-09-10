@@ -23,7 +23,7 @@ COMPATIBLE_CORE = "0005_portal_workflows"
 COMPLIANCE_HEAD = "0001_carrier_readiness"
 KNOWN_CORE = (
     "0001_foundation", "0002_identity_tenancy", "0003_integrations_durability",
-    "0004_integration_rls_roles", COMPATIBLE_CORE, "0006_identity_rbac_rls", "0007_document_storage",
+    "0004_integration_rls_roles", COMPATIBLE_CORE, "0006_identity_rbac_rls", "0007_document_storage", "0008_document_verification_lease",
 )
 
 
@@ -36,10 +36,10 @@ def upgrade_plan(core: tuple[str, ...], compliance: tuple[str, ...]) -> tuple[tu
     if compliance not in ((), (COMPLIANCE_HEAD,)):
         raise ValueError("schema_upgrade_refuses_unknown_compliance")
     if compliance:
-        if current not in (COMPATIBLE_CORE, "0006_identity_rbac_rls", CANONICAL_MIGRATION_HEAD):
+        if current not in (COMPATIBLE_CORE, "0006_identity_rbac_rls", "0007_document_storage", CANONICAL_MIGRATION_HEAD):
             raise ValueError("schema_upgrade_refuses_inconsistent_history")
         return (("alembic.ini", "head"), ("alembic-compliance.ini", "head"))
-    if current in ("0006_identity_rbac_rls", CANONICAL_MIGRATION_HEAD):
+    if current in ("0006_identity_rbac_rls", "0007_document_storage", CANONICAL_MIGRATION_HEAD):
         raise ValueError("compliance_missing_after_identity_upgrade_requires_review")
     return (
         ("alembic.ini", COMPATIBLE_CORE),

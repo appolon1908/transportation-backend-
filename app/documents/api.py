@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
@@ -18,7 +19,7 @@ from app.documents.schemas import AttachIn, DocumentOut, UploadIn, VersionIn
 from app.documents.storage import (
     ObjectSpec, configured_settings, scanner_adapter, storage_adapter, unavailable,
 )
-from app.models import AuditEntry, Document, Load, LoadShipmentLeg, Shipment, ShipmentLeg
+from app.models import AuditEntry, Document, IdempotencyRecord, Load, LoadShipmentLeg, OutboxMessage, Shipment, ShipmentLeg
 from app.portals.models import PortalPrincipalBinding
 from app.portals.service import capability_is_enabled
 from app.security import Actor, get_actor
@@ -171,41 +172,109 @@ async def get_document(document_id: UUID, db: AsyncSession = Depends(get_db), ac
 async def confirm_document(document_id: UUID, payload: VersionIn, request: Request,
                            db: AsyncSession = Depends(get_db), actor: Actor = Depends(get_actor),
                            _cfg=Depends(storage_access)):
-    await document(db, actor, document_id)
+    operation = "document.verification_completed"
+    key = request.headers.get("Idempotency-Key", "")
+    if not key or len(key) > 200 or any(ord(c) < 33 or ord(c) > 126 for c in key):
+        raise reject(400, "IDEMPOTENCY_KEY_REQUIRED")
+    command_payload = {"document_id": str(document_id), **payload.model_dump()}
+    request_hash = hashlib.sha256(json.dumps(command_payload, sort_keys=True).encode()).hexdigest()
+    digest = hashlib.sha256(f"{actor.tenant_id}:{actor.subject}:{operation}:{key}".encode()).digest()
+    lock_id = int.from_bytes(digest[:8], "big", signed=True)
 
-    async def action():
-        doc, obj = await document(db, actor, document_id, lock=True)
-        if doc.version != payload.expected_version:
-            raise reject(409, "VERSION_CONFLICT")
-        if doc.status != "PENDING_UPLOAD":
-            raise reject(409, "DOCUMENT_NOT_CONFIRMABLE")
-        if obj.expires_at <= datetime.now(timezone.utc):
-            raise reject(410, "UPLOAD_SESSION_EXPIRED")
-        spec = spec_for(doc, obj)
+    async def command_record():
+        await db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_id})
+        return await db.scalar(select(IdempotencyRecord).where(
+            IdempotencyRecord.tenant_id == actor.tenant_id,
+            IdempotencyRecord.actor_id == actor.subject,
+            IdempotencyRecord.operation == operation,
+            IdempotencyRecord.key == key,
+        ).execution_options(populate_existing=True))
+
+    record = await command_record()
+    doc, obj = await document(db, actor, document_id, lock=True)
+    now = datetime.now(timezone.utc)
+    if record:
+        if record.request_hash != request_hash:
+            raise reject(409, "IDEMPOTENCY_KEY_REUSED")
+        if record.status == "COMPLETED" and record.response_json is not None:
+            return record.response_json
+    if obj.verification_expires_at and obj.verification_expires_at > now:
+        raise reject(409, "COMMAND_IN_PROGRESS")
+    if doc.version != payload.expected_version:
+        raise reject(409, "VERSION_CONFLICT")
+    if doc.status not in {"PENDING_UPLOAD", "VERIFYING"}:
+        raise reject(409, "DOCUMENT_NOT_CONFIRMABLE")
+    if obj.expires_at <= now:
+        raise reject(410, "UPLOAD_SESSION_EXPIRED")
+
+    token = uuid4()
+    spec = spec_for(doc, obj)
+    obj.verification_token = token
+    obj.verification_expires_at = now + timedelta(minutes=5)
+    doc.status = "VERIFYING"
+    if record is None:
+        record = IdempotencyRecord(tenant_id=actor.tenant_id, actor_id=actor.subject,
+            operation=operation, key=key, request_hash=request_hash)
+        db.add(record)
+    record.status = "IN_PROGRESS"
+    record.response_json = {"verification_token": str(token)}
+    await db.commit()
+    # No checked-out DB connection, row lock or transaction during provider latency.
+    try:
         store = storage_adapter()
+        version = None
+        rejection = None
         try:
             version = await asyncio.to_thread(store.inspect, spec)
             data = await asyncio.to_thread(store.read, spec, version)
         except ValueError:
-            doc.status, obj.rejection_code = "REJECTED", "OBJECT_VALIDATION_FAILED"
+            result_status, rejection = "REJECTED", "OBJECT_VALIDATION_FAILED"
         except Exception as exc:
             raise unavailable() from exc
         else:
             verdict = await scanner_adapter().scan(data)
             if verdict not in {"CLEAN", "INFECTED"}:
                 raise unavailable("SCAN_FAILED")
-            obj.version_id = version
-            if verdict == "INFECTED":
-                doc.status, obj.rejection_code = "QUARANTINED", "MALWARE_DETECTED"
-            else:
-                obj.verified_at = datetime.now(timezone.utc)
-                doc.status = "AVAILABLE"
-        doc.version += 1
-        await db.flush()
-        return metadata(doc, obj), "Document", doc.id, doc.version
+            result_status = "QUARANTINED" if verdict == "INFECTED" else "AVAILABLE"
+            rejection = "MALWARE_DETECTED" if verdict == "INFECTED" else None
 
-    return await command(db, request, actor, "document.verification_completed",
-                         {"document_id": str(document_id), **payload.model_dump()}, action)
+        record = await command_record()
+        doc, obj = await document(db, actor, document_id, lock=True)
+        if (obj.verification_token != token or doc.status != "VERIFYING"
+                or doc.version != payload.expected_version
+                or obj.verification_expires_at <= datetime.now(timezone.utc)
+                or record is None or record.response_json != {"verification_token": str(token)}):
+            raise reject(409, "VERIFICATION_LEASE_LOST")
+        doc.status, obj.rejection_code = result_status, rejection
+        obj.version_id = version
+        obj.verified_at = datetime.now(timezone.utc) if result_status == "AVAILABLE" else None
+        obj.verification_token = obj.verification_expires_at = None
+        doc.version += 1
+        result = metadata(doc, obj)
+        correlation_id = getattr(request.state, "correlation_id", request.headers.get("X-Correlation-Id", ""))
+        db.add(AuditEntry(tenant_id=actor.tenant_id, actor_id=actor.subject,
+            action="DOCUMENT_VERIFICATION_COMPLETED", resource_type="Document", resource_id=doc.id,
+            correlation_id=correlation_id, metadata_json={"operation": operation}))
+        db.add(OutboxMessage(tenant_id=actor.tenant_id, event_type=operation + ".v1",
+            aggregate_type="Document", aggregate_id=doc.id, aggregate_version=doc.version,
+            payload=result, correlation_id=correlation_id, status="PENDING_CONFIGURATION"))
+        record.status, record.response_json = "COMPLETED", result
+        await db.commit()
+        return result
+    except Exception:
+        await db.rollback()
+        # Only this lease owner may reset a failed attempt. A replaced or expired
+        # attempt cannot overwrite a newer worker's result. Process loss recovers
+        # through the persisted expiry on a subsequent confirmation request.
+        record = await command_record()
+        doc, obj = await document(db, actor, document_id, lock=True)
+        if obj.verification_token == token:
+            doc.status = "PENDING_UPLOAD"
+            obj.verification_token = obj.verification_expires_at = None
+        if record and record.status == "IN_PROGRESS" and record.response_json == {"verification_token": str(token)}:
+            await db.delete(record)
+        await db.commit()
+        raise
 
 
 @router.get("/loads/{load_id}/documents", response_model=list[DocumentOut])

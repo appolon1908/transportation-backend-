@@ -31,13 +31,13 @@ rejected and quarantined uploads, and do not expose object coordinates.
 
 ## State and safety contract
 
-`PENDING_UPLOAD -> AVAILABLE -> ATTACHED` is the clean path. Invalid content is
+`PENDING_UPLOAD -> VERIFYING -> AVAILABLE -> ATTACHED` is the clean path. Invalid content is
 REJECTED and malware is QUARANTINED; neither may be downloaded or attached.
 Scanner/provider outages return 503 and leave the prior durable state unchanged.
 Unknown scanner responses are failures, never clean verdicts. Expired sessions
 return 410 on confirmation; retrying an upload key does not renew its lifetime.
 
-Mutations have command idempotency, per-key transaction locking, row locking,
+Mutations have command idempotency, short per-key transaction locking, row locking,
 expected versions, audit records and outbox events. Verification events use
 `document.verification_completed.v1` and explicitly include the resulting status;
 a completed verification does not imply a clean result. Signed upload URLs are
@@ -80,9 +80,10 @@ render documents inline, execute macros, or accept archive upload formats.
 
 ## Schema and rollback
 
-0007_document_storage is additive after 0006. Existing migration files remain
+0007_document_storage is additive after 0006. The additive
+0008_document_verification_lease migration adds the verification claim fields. Existing migration files remain
 unchanged. Use the explicit `python -m app.schema_upgrade` entrypoint; fresh
-installations still apply historical compliance at core 0005 before core 0007.
+installations still apply historical compliance at core 0005 before the current core head.
 There are no API-startup migrations. The API database role receives only
 SELECT/INSERT/UPDATE on document_objects; ingress and worker roles receive none.
 
@@ -105,3 +106,19 @@ bucket, malware database or provider integration is certified by those tests.
 - AWS S3 PutObject: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html
 - AWS conditional writes: https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html
 - ClamAV INSTREAM: https://docs.clamav.net/manual/Usage/ClamdProtocol.html
+
+## Verification transaction lifecycle
+
+Confirmation reserves its idempotency key and stores a random verification token
+with a five-minute expiry in a short transaction. It commits before S3 inspection,
+bounded reads and ClamAV scanning, releasing the request connection. Finalization
+rechecks authorization, document version, token and expiry in a new transaction,
+then atomically records the result, audit entry, outbox event and idempotent reply.
+
+Concurrent requests receive 409 while the claim is active. Provider failures reset
+only the current claim to PENDING_UPLOAD; a process crash leaves an expiring claim
+that a later confirmation can reclaim while the upload session remains valid.
+An older scanner result cannot overwrite a replacement claim. Cancellation or
+process loss never publishes a clean result. No background worker or scheduler is
+required to authorize a retry; clients must retry after the lease expires. If the
+upload session has also expired, create a new upload session instead.

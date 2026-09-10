@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-CANONICAL_MIGRATION_HEAD = "0007_document_storage"
+CANONICAL_MIGRATION_HEAD = "0008_document_verification_lease"
 BACKEND_SERVICE_NAME = "freight-platform-backend"
 INTEGRATION_SERVICE_NAME = "freight-platform-integrations"
 
