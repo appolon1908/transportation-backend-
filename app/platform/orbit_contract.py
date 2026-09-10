@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.release import BACKEND_SERVICE_NAME, CANONICAL_MIGRATION_HEAD
+from app.repository_identity import REPOSITORY, REPOSITORY_ID
 
 CONTRACT_PATH = "/api/v1/platform/contract"
 CONTRACT_VERSION = "1.0.0"
@@ -32,7 +33,7 @@ class Requirements(ContractModel):
 
 class AdoptionManifest(ContractModel):
     schemaVersion: Literal["2.0.0"]
-    repository: Literal["appolon1908-hue/transportation-backend-"]
+    repository: Literal["appolon1908-hue/freight-platform-backend"]
     classification: Literal["backend-api"]
     targetBranch: Literal["development"]
     adoptionMode: Literal["contract-only"]
@@ -96,6 +97,8 @@ class SafetyContract(ContractModel):
 class BackendContract(ContractModel):
     contract_version: Literal["1.0.0"] = "1.0.0"
     service_name: Literal["freight-platform-backend"] = BACKEND_SERVICE_NAME
+    repository: str = REPOSITORY
+    repository_id: str = REPOSITORY_ID
     application_version: str
     migration_head: str = CANONICAL_MIGRATION_HEAD
     tenant_id: UUID

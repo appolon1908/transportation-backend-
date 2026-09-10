@@ -69,6 +69,8 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.12"
+      - name: Validate canonical repository identity contracts
+        run: python scripts/ci/validate_repository_identity.py --evidence evidence/repository-identity.json
       - name: Prepare isolated contract database
         run: |
           set -Eeuo pipefail
@@ -107,7 +109,12 @@ jobs:
             if [[ ! -f "$directory/package-lock.json" && ! -f "$directory/pnpm-lock.yaml" && ! -f "$directory/yarn.lock" ]]; then reproducible=false; fi
           done < <(find . -maxdepth 5 -type f -name package.json -not -path '*/node_modules/*' -not -path './.git/*' | sort)
           publish=false
-          case "$SOURCE_BRANCH" in staging|production|main) [[ -n "$dockerfile" && "$reproducible" == true ]] && publish=true ;; esac
+          case "$SOURCE_BRANCH" in
+            staging|production|main)
+              python -c 'import os; from app.repository_identity import require_canonical_checkout; require_canonical_checkout(os.environ)'
+              [[ -n "$dockerfile" && "$reproducible" == true ]] && publish=true
+              ;;
+          esac
           echo "dockerfile=$dockerfile" >> "$GITHUB_OUTPUT"
           echo "reproducible=$reproducible" >> "$GITHUB_OUTPUT"
           echo "publish=$publish" >> "$GITHUB_OUTPUT"
@@ -120,11 +127,9 @@ jobs:
           DOCKERFILE: ${{ steps.image.outputs.dockerfile }}
         run: |
           set -Eeuo pipefail
-          owner="${GITHUB_REPOSITORY%%/*}"
-          raw_name="${GITHUB_REPOSITORY#*/}"
-          name="$(printf '%s' "$raw_name" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g; s/^[._-]+//; s/[._-]+$//')"
+          python -c 'import os; from app.repository_identity import require_canonical_checkout; require_canonical_checkout(os.environ)'
           branch_tag="$(printf '%s' "$SOURCE_BRANCH" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g')"
-          image="ghcr.io/${owner}/${name}:${branch_tag}-${SOURCE_SHA:0:12}"
+          image="ghcr.io/appolon1908-hue/freight-platform-backend:${branch_tag}-${SOURCE_SHA:0:12}"
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           docker build --pull=false --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" --label "org.opencontainers.image.revision=${SOURCE_SHA}" -f "$DOCKERFILE" -t "$image" "$(dirname "$DOCKERFILE")"
           docker push "$image" | tee "$RUNNER_TEMP/push.log"
@@ -142,10 +147,12 @@ jobs:
           python - <<'PY'
           import hashlib, json, os, subprocess
           from pathlib import Path
+          from app.repository_identity import repository_evidence
           evidence = Path('evidence')
           payload = {
               'schema_version': 1,
               'repository': os.environ['GITHUB_REPOSITORY'],
+              'repository_identity': repository_evidence(os.environ),
               'branch': os.environ['SOURCE_BRANCH'],
               'source_sha': os.environ['SOURCE_SHA'],
               'source_tree': subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], text=True).strip(),

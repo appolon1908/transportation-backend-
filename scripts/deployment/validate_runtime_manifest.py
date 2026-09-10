@@ -214,7 +214,7 @@ def validate_manifest(
 
     source = _require_object(payload, "source")
     _require_exact_keys(source, {"repository", "sha"}, "source")
-    if source.get("repository") != "appolon1908-hue/transportation-backend-":
+    if source.get("repository") != "appolon1908-hue/freight-platform-backend":
         raise ManifestError("source.repository must identify the authoritative backend repository")
 
     runtime = _require_object(payload, "runtime")

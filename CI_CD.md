@@ -2,11 +2,12 @@
 
 ## Repository
 
-- Repository: `appolon1908-hue/transportation-backend-`
+- Repository: `appolon1908-hue/freight-platform-backend`
 - Class: `backend`
 - Purpose: freight-platform backend
 - Current default branch: governance/documentation only
-- Buildable application authority: `be/release-readiness-v6`
+- Integrated application authority: `development` (PRs #14, #2, #11 and #15 accepted).
+- Physical rename and external trust acceptance: issue #4 / `docs/REPOSITORY_RENAME.md`.
 
 ## Persistent branches
 
@@ -30,7 +31,7 @@ The initial bootstrap places the CI/CD policy on every persistent branch. That d
 
 `.github/workflows/required-ci.yml` runs on every push, pull request, and manual dispatch. It proves exact source identity, runs checksum-verified secret scanning, validates repository data and documentation, installs Python dependencies in an isolated virtual environment, compiles Python, runs tests, checks installed dependency consistency, validates Compose, builds Dockerfiles, and publishes sanitized evidence.
 
-A pull request from `be/release-readiness-v6` into `development` will be validated against that exact application head by the base branch's required workflow.
+Implementation changes target `development` and are validated against their exact source and proposed merge result.
 
 ## Every-branch audit
 
@@ -44,7 +45,7 @@ Runtime deployment, database migrations, provider calls, and external effects re
 
 ## Current source gate
 
-`main` does not contain the buildable freight backend. Delivery on policy-only persistent branches fails closed until `be/release-readiness-v6` is independently reviewed and promoted into `development`, then through `test`, `staging`, `production`, and `main`.
+The buildable backend is integrated into `development`. Promotion through `test`, `staging`, `production`, and `main` remains separately gated. Canonical publication additionally requires the observed GitHub repository name, repository ID and owner ID to match the source identity contract. Validation can run before the administrative rename, but cannot publish from the legacy location.
 
 ## Required GitHub settings
 

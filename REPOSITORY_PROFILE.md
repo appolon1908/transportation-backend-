@@ -1,8 +1,8 @@
-# Repository Profile — `transportation-backend-`
+# Repository Profile — `freight-platform-backend`
 
 ## Identity
 
-- **Repository:** `appolon1908-hue/transportation-backend-`
+- **Repository:** `appolon1908-hue/freight-platform-backend`
 - **Category:** Product backend — freight brokerage
 - **Visibility:** `public`
 - **Default branch:** `main`
