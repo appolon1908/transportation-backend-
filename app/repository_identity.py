@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-REPOSITORY = "appolon1908-hue/freight-platform-backend"
+REPOSITORY = "appolon1908/transportation-backend-"
 REPOSITORY_ID = "1343761943"
-OWNER_ID = "275410064"
+OWNER_ID = "335843231"
 SOURCE_URL = f"https://github.com/{REPOSITORY}"
 CLONE_URL = f"{SOURCE_URL}.git"
 IMAGE = f"ghcr.io/{REPOSITORY}"
