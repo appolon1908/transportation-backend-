@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IMAGE: ghcr.io/appolon1908-hue/freight-platform-backend
+  IMAGE: ghcr.io/appolon1908/transportation-backend-
 
 jobs:
   publish-attested-image:
@@ -45,9 +45,9 @@ jobs:
           PYTHON_BASE_IMAGE: ${{ inputs.python_base_image }}
         run: |
           set -euo pipefail
-          test "$GITHUB_REPOSITORY" = "appolon1908-hue/freight-platform-backend"
+          test "$GITHUB_REPOSITORY" = "appolon1908/transportation-backend-"
           test "$GITHUB_REPOSITORY_ID" = "1343761943"
-          test "$GITHUB_REPOSITORY_OWNER_ID" = "275410064"
+          test "$GITHUB_REPOSITORY_OWNER_ID" = "335843231"
           [[ "$SOURCE_REF" =~ ^[0-9a-f]{40}$ || "$SOURCE_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]
           [[ "$IMAGE_TAG" =~ ^[0-9A-Za-z][0-9A-Za-z._-]{2,63}$ ]]
           [[ "$PYTHON_BASE_IMAGE" =~ ^python:3\.12-slim-bookworm@sha256:[0-9a-f]{64}$ ]]

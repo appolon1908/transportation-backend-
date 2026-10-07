@@ -33,7 +33,7 @@ class Requirements(ContractModel):
 
 class AdoptionManifest(ContractModel):
     schemaVersion: Literal["2.0.0"]
-    repository: Literal["appolon1908-hue/freight-platform-backend"]
+    repository: Literal["appolon1908/transportation-backend-"]
     classification: Literal["backend-api"]
     targetBranch: Literal["development"]
     adoptionMode: Literal["contract-only"]

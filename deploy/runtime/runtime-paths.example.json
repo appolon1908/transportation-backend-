@@ -2,7 +2,7 @@
   "schema_version": 1,
   "environment": "staging",
   "source": {
-    "repository": "appolon1908-hue/freight-platform-backend",
+    "repository": "appolon1908/transportation-backend-",
     "sha": "UNVERIFIED"
   },
   "runtime": {

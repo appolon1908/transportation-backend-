@@ -1,6 +1,6 @@
 name: freight-platform-backend
 
-x-backend-image: &backend-image ghcr.io/appolon1908-hue/freight-platform-backend:${IMAGE_TAG:?set IMAGE_TAG to an immutable tag or digest}
+x-backend-image: &backend-image ghcr.io/appolon1908/transportation-backend-:${IMAGE_TAG:?set IMAGE_TAG to an immutable tag or digest}
 x-backend-env: &backend-env
   ENVIRONMENT: production
   DATABASE_URL: ${DATABASE_URL:?required}
