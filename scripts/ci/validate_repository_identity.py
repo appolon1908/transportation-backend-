@@ -19,7 +19,8 @@ from app.repository_identity import (  # noqa: E402
     IMAGE, REPOSITORY, SOURCE_URL, repository_evidence, require_canonical_checkout,
 )
 
-LEGACY = "transportation-backend-"
+LEGACY = "appolon1908-hue/freight-platform-backend"
+PACKAGE_NAME = "freight-platform-backend"
 ACTIVE_ROOTS = ("app", "deploy", "orbit", ".github/workflows")
 
 
@@ -49,7 +50,7 @@ def validate(root: Path) -> dict[str, object]:
         errors.append("orbit_repository_mismatch")
     if runtime.get("source", {}).get("repository") != REPOSITORY:
         errors.append("runtime_repository_mismatch")
-    if metadata.get("project", {}).get("name") != REPOSITORY.split("/")[1]:
+    if metadata.get("project", {}).get("name") != PACKAGE_NAME:
         errors.append("package_name_mismatch")
     if SOURCE_URL not in (root / "deploy/backend/Dockerfile.v4").read_text():
         errors.append("release_image_source_label_mismatch")
