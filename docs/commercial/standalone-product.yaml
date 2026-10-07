@@ -1,0 +1,17 @@
+version: 1
+product_id: "transport"
+product_name: "Codestra Transport"
+repository: "appolon1908/transportation-backend-"
+standalone: true
+core_runtime_dependency_on_other_codestra_products: false
+integration_policy: optional_adapters_only
+independence_gates:
+  - boot_without_other_codestra_products
+  - health_without_optional_integrations
+  - independent_database_authority
+  - independent_auth_boundary
+  - independent_api_contract
+  - independent_ci_cd
+  - independent_staging
+  - independent_production
+  - independent_backup_restore
