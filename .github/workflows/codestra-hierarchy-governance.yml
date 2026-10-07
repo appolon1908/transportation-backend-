@@ -1,0 +1,56 @@
+name: Codestra Hierarchy Governance
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hierarchy-governance:
+    name: hierarchy-governance
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Validate control-plane manifest
+        shell: python
+        run: |
+          import pathlib, yaml
+          data = yaml.safe_load(pathlib.Path(".codestra/control-plane.yml").read_text())
+          assert data["promotion"]["chain"] == ["development","testing","staging","production"]
+          assert data["promotion"]["force_push_allowed"] is False
+          for key in ("production_go","live_capabilities_enabled","external_effects_enabled"):
+              assert data["effects"][key] is False
+          assert len(data["sections"]) == 8
+          print("hierarchy governance PASS")
+
+
+  codestra-control-plane:
+    name: codestra-control-plane
+    needs: hierarchy-governance
+    runs-on: ubuntu-24.04
+    if: ${{ always() }}
+    steps:
+      - name: Preserve required control-plane context
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ needs.hierarchy-governance.result }}" = "success"
+
+  codestra-slash-control-plane:
+    name: codestra/control-plane
+    needs: hierarchy-governance
+    runs-on: ubuntu-24.04
+    if: ${{ always() }}
+    steps:
+      - name: Preserve legacy required control-plane context
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ needs.hierarchy-governance.result }}" = "success"
