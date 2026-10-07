@@ -1,0 +1,775 @@
+{
+  "schema_version": "codestra.workstations.v3",
+  "family": "transport",
+  "product": "transportation-backend-",
+  "sections": [
+    {
+      "section": "tr-01-foundation",
+      "branch": "section/tr-01-foundation",
+      "order": 1,
+      "depends_on": [],
+      "subsections": [
+        {
+          "subsection": "01-app-bootstrap",
+          "workstation_id": "transportation-backend::tr-01-foundation::01-app-bootstrap",
+          "branch": "subsection/tr-01-foundation--01-app-bootstrap",
+          "parent_branch": "section/tr-01-foundation",
+          "order": 1,
+          "depends_on": [],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-01-foundation/subsections/01-app-bootstrap/repo"
+        },
+        {
+          "subsection": "02-config-errors",
+          "workstation_id": "transportation-backend::tr-01-foundation::02-config-errors",
+          "branch": "subsection/tr-01-foundation--02-config-errors",
+          "parent_branch": "section/tr-01-foundation",
+          "order": 2,
+          "depends_on": [
+            "transportation-backend::tr-01-foundation::01-app-bootstrap"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-01-foundation/subsections/02-config-errors/repo"
+        },
+        {
+          "subsection": "03-lifecycle",
+          "workstation_id": "transportation-backend::tr-01-foundation::03-lifecycle",
+          "branch": "subsection/tr-01-foundation--03-lifecycle",
+          "parent_branch": "section/tr-01-foundation",
+          "order": 3,
+          "depends_on": [
+            "transportation-backend::tr-01-foundation::02-config-errors"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-01-foundation/subsections/03-lifecycle/repo"
+        }
+      ]
+    },
+    {
+      "section": "tr-02-customers",
+      "branch": "section/tr-02-customers",
+      "order": 2,
+      "depends_on": [
+        "transportation-backend::tr-01-foundation"
+      ],
+      "subsections": [
+        {
+          "subsection": "01-accounts",
+          "workstation_id": "transportation-backend::tr-02-customers::01-accounts",
+          "branch": "subsection/tr-02-customers--01-accounts",
+          "parent_branch": "section/tr-02-customers",
+          "order": 1,
+          "depends_on": [],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-02-customers/subsections/01-accounts/repo"
+        },
+        {
+          "subsection": "02-service-profiles",
+          "workstation_id": "transportation-backend::tr-02-customers::02-service-profiles",
+          "branch": "subsection/tr-02-customers--02-service-profiles",
+          "parent_branch": "section/tr-02-customers",
+          "order": 2,
+          "depends_on": [
+            "transportation-backend::tr-02-customers::01-accounts"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-02-customers/subsections/02-service-profiles/repo"
+        },
+        {
+          "subsection": "03-addresses",
+          "workstation_id": "transportation-backend::tr-02-customers::03-addresses",
+          "branch": "subsection/tr-02-customers--03-addresses",
+          "parent_branch": "section/tr-02-customers",
+          "order": 3,
+          "depends_on": [
+            "transportation-backend::tr-02-customers::02-service-profiles"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-02-customers/subsections/03-addresses/repo"
+        }
+      ]
+    },
+    {
+      "section": "tr-03-trips",
+      "branch": "section/tr-03-trips",
+      "order": 3,
+      "depends_on": [
+        "transportation-backend::tr-02-customers"
+      ],
+      "subsections": [
+        {
+          "subsection": "01-trip-model",
+          "workstation_id": "transportation-backend::tr-03-trips::01-trip-model",
+          "branch": "subsection/tr-03-trips--01-trip-model",
+          "parent_branch": "section/tr-03-trips",
+          "order": 1,
+          "depends_on": [],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-03-trips/subsections/01-trip-model/repo"
+        },
+        {
+          "subsection": "02-scheduling",
+          "workstation_id": "transportation-backend::tr-03-trips::02-scheduling",
+          "branch": "subsection/tr-03-trips--02-scheduling",
+          "parent_branch": "section/tr-03-trips",
+          "order": 2,
+          "depends_on": [
+            "transportation-backend::tr-03-trips::01-trip-model"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-03-trips/subsections/02-scheduling/repo"
+        },
+        {
+          "subsection": "03-status-lifecycle",
+          "workstation_id": "transportation-backend::tr-03-trips::03-status-lifecycle",
+          "branch": "subsection/tr-03-trips--03-status-lifecycle",
+          "parent_branch": "section/tr-03-trips",
+          "order": 3,
+          "depends_on": [
+            "transportation-backend::tr-03-trips::02-scheduling"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-03-trips/subsections/03-status-lifecycle/repo"
+        }
+      ]
+    },
+    {
+      "section": "tr-04-dispatch",
+      "branch": "section/tr-04-dispatch",
+      "order": 4,
+      "depends_on": [
+        "transportation-backend::tr-03-trips"
+      ],
+      "subsections": [
+        {
+          "subsection": "01-assignment",
+          "workstation_id": "transportation-backend::tr-04-dispatch::01-assignment",
+          "branch": "subsection/tr-04-dispatch--01-assignment",
+          "parent_branch": "section/tr-04-dispatch",
+          "order": 1,
+          "depends_on": [],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-04-dispatch/subsections/01-assignment/repo"
+        },
+        {
+          "subsection": "02-routing",
+          "workstation_id": "transportation-backend::tr-04-dispatch::02-routing",
+          "branch": "subsection/tr-04-dispatch--02-routing",
+          "parent_branch": "section/tr-04-dispatch",
+          "order": 2,
+          "depends_on": [
+            "transportation-backend::tr-04-dispatch::01-assignment"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-04-dispatch/subsections/02-routing/repo"
+        },
+        {
+          "subsection": "03-exceptions",
+          "workstation_id": "transportation-backend::tr-04-dispatch::03-exceptions",
+          "branch": "subsection/tr-04-dispatch--03-exceptions",
+          "parent_branch": "section/tr-04-dispatch",
+          "order": 3,
+          "depends_on": [
+            "transportation-backend::tr-04-dispatch::02-routing"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-04-dispatch/subsections/03-exceptions/repo"
+        }
+      ]
+    },
+    {
+      "section": "tr-05-fleet",
+      "branch": "section/tr-05-fleet",
+      "order": 5,
+      "depends_on": [
+        "transportation-backend::tr-04-dispatch"
+      ],
+      "subsections": [
+        {
+          "subsection": "01-drivers",
+          "workstation_id": "transportation-backend::tr-05-fleet::01-drivers",
+          "branch": "subsection/tr-05-fleet--01-drivers",
+          "parent_branch": "section/tr-05-fleet",
+          "order": 1,
+          "depends_on": [],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-05-fleet/subsections/01-drivers/repo"
+        },
+        {
+          "subsection": "02-vehicles",
+          "workstation_id": "transportation-backend::tr-05-fleet::02-vehicles",
+          "branch": "subsection/tr-05-fleet--02-vehicles",
+          "parent_branch": "section/tr-05-fleet",
+          "order": 2,
+          "depends_on": [
+            "transportation-backend::tr-05-fleet::01-drivers"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-05-fleet/subsections/02-vehicles/repo"
+        },
+        {
+          "subsection": "03-compliance",
+          "workstation_id": "transportation-backend::tr-05-fleet::03-compliance",
+          "branch": "subsection/tr-05-fleet--03-compliance",
+          "parent_branch": "section/tr-05-fleet",
+          "order": 3,
+          "depends_on": [
+            "transportation-backend::tr-05-fleet::02-vehicles"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-05-fleet/subsections/03-compliance/repo"
+        }
+      ]
+    },
+    {
+      "section": "tr-06-pricing-billing",
+      "branch": "section/tr-06-pricing-billing",
+      "order": 6,
+      "depends_on": [
+        "transportation-backend::tr-05-fleet"
+      ],
+      "subsections": [
+        {
+          "subsection": "01-rates",
+          "workstation_id": "transportation-backend::tr-06-pricing-billing::01-rates",
+          "branch": "subsection/tr-06-pricing-billing--01-rates",
+          "parent_branch": "section/tr-06-pricing-billing",
+          "order": 1,
+          "depends_on": [],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-06-pricing-billing/subsections/01-rates/repo"
+        },
+        {
+          "subsection": "02-invoices",
+          "workstation_id": "transportation-backend::tr-06-pricing-billing::02-invoices",
+          "branch": "subsection/tr-06-pricing-billing--02-invoices",
+          "parent_branch": "section/tr-06-pricing-billing",
+          "order": 2,
+          "depends_on": [
+            "transportation-backend::tr-06-pricing-billing::01-rates"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-06-pricing-billing/subsections/02-invoices/repo"
+        },
+        {
+          "subsection": "03-payments",
+          "workstation_id": "transportation-backend::tr-06-pricing-billing::03-payments",
+          "branch": "subsection/tr-06-pricing-billing--03-payments",
+          "parent_branch": "section/tr-06-pricing-billing",
+          "order": 3,
+          "depends_on": [
+            "transportation-backend::tr-06-pricing-billing::02-invoices"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-06-pricing-billing/subsections/03-payments/repo"
+        }
+      ]
+    },
+    {
+      "section": "tr-07-api-integrations",
+      "branch": "section/tr-07-api-integrations",
+      "order": 7,
+      "depends_on": [
+        "transportation-backend::tr-06-pricing-billing"
+      ],
+      "subsections": [
+        {
+          "subsection": "01-rest-postman",
+          "workstation_id": "transportation-backend::tr-07-api-integrations::01-rest-postman",
+          "branch": "subsection/tr-07-api-integrations--01-rest-postman",
+          "parent_branch": "section/tr-07-api-integrations",
+          "order": 1,
+          "depends_on": [],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-07-api-integrations/subsections/01-rest-postman/repo"
+        },
+        {
+          "subsection": "02-middleware",
+          "workstation_id": "transportation-backend::tr-07-api-integrations::02-middleware",
+          "branch": "subsection/tr-07-api-integrations--02-middleware",
+          "parent_branch": "section/tr-07-api-integrations",
+          "order": 2,
+          "depends_on": [
+            "transportation-backend::tr-07-api-integrations::01-rest-postman"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-07-api-integrations/subsections/02-middleware/repo"
+        },
+        {
+          "subsection": "03-provider-adapters",
+          "workstation_id": "transportation-backend::tr-07-api-integrations::03-provider-adapters",
+          "branch": "subsection/tr-07-api-integrations--03-provider-adapters",
+          "parent_branch": "section/tr-07-api-integrations",
+          "order": 3,
+          "depends_on": [
+            "transportation-backend::tr-07-api-integrations::02-middleware"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-07-api-integrations/subsections/03-provider-adapters/repo"
+        }
+      ]
+    },
+    {
+      "section": "tr-08-observability",
+      "branch": "section/tr-08-observability",
+      "order": 8,
+      "depends_on": [
+        "transportation-backend::tr-07-api-integrations"
+      ],
+      "subsections": [
+        {
+          "subsection": "01-metrics",
+          "workstation_id": "transportation-backend::tr-08-observability::01-metrics",
+          "branch": "subsection/tr-08-observability--01-metrics",
+          "parent_branch": "section/tr-08-observability",
+          "order": 1,
+          "depends_on": [],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-08-observability/subsections/01-metrics/repo"
+        },
+        {
+          "subsection": "02-logs",
+          "workstation_id": "transportation-backend::tr-08-observability::02-logs",
+          "branch": "subsection/tr-08-observability--02-logs",
+          "parent_branch": "section/tr-08-observability",
+          "order": 2,
+          "depends_on": [
+            "transportation-backend::tr-08-observability::01-metrics"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-08-observability/subsections/02-logs/repo"
+        },
+        {
+          "subsection": "03-slo-alerts",
+          "workstation_id": "transportation-backend::tr-08-observability::03-slo-alerts",
+          "branch": "subsection/tr-08-observability--03-slo-alerts",
+          "parent_branch": "section/tr-08-observability",
+          "order": 3,
+          "depends_on": [
+            "transportation-backend::tr-08-observability::02-logs"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-08-observability/subsections/03-slo-alerts/repo"
+        }
+      ]
+    },
+    {
+      "section": "tr-09-testing-deploy",
+      "branch": "section/tr-09-testing-deploy",
+      "order": 9,
+      "depends_on": [
+        "transportation-backend::tr-08-observability"
+      ],
+      "subsections": [
+        {
+          "subsection": "01-testing",
+          "workstation_id": "transportation-backend::tr-09-testing-deploy::01-testing",
+          "branch": "subsection/tr-09-testing-deploy--01-testing",
+          "parent_branch": "section/tr-09-testing-deploy",
+          "order": 1,
+          "depends_on": [],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-09-testing-deploy/subsections/01-testing/repo"
+        },
+        {
+          "subsection": "02-environments",
+          "workstation_id": "transportation-backend::tr-09-testing-deploy::02-environments",
+          "branch": "subsection/tr-09-testing-deploy--02-environments",
+          "parent_branch": "section/tr-09-testing-deploy",
+          "order": 2,
+          "depends_on": [
+            "transportation-backend::tr-09-testing-deploy::01-testing"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-09-testing-deploy/subsections/02-environments/repo"
+        },
+        {
+          "subsection": "03-ci-cd",
+          "workstation_id": "transportation-backend::tr-09-testing-deploy::03-ci-cd",
+          "branch": "subsection/tr-09-testing-deploy--03-ci-cd",
+          "parent_branch": "section/tr-09-testing-deploy",
+          "order": 3,
+          "depends_on": [
+            "transportation-backend::tr-09-testing-deploy::02-environments"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-09-testing-deploy/subsections/03-ci-cd/repo"
+        }
+      ]
+    },
+    {
+      "section": "tr-10-release",
+      "branch": "section/tr-10-release",
+      "order": 10,
+      "depends_on": [
+        "transportation-backend::tr-09-testing-deploy"
+      ],
+      "subsections": [
+        {
+          "subsection": "01-performance-dr",
+          "workstation_id": "transportation-backend::tr-10-release::01-performance-dr",
+          "branch": "subsection/tr-10-release--01-performance-dr",
+          "parent_branch": "section/tr-10-release",
+          "order": 1,
+          "depends_on": [],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-10-release/subsections/01-performance-dr/repo"
+        },
+        {
+          "subsection": "02-certification",
+          "workstation_id": "transportation-backend::tr-10-release::02-certification",
+          "branch": "subsection/tr-10-release--02-certification",
+          "parent_branch": "section/tr-10-release",
+          "order": 2,
+          "depends_on": [
+            "transportation-backend::tr-10-release::01-performance-dr"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-10-release/subsections/02-certification/repo"
+        },
+        {
+          "subsection": "03-promotion-rollback",
+          "workstation_id": "transportation-backend::tr-10-release::03-promotion-rollback",
+          "branch": "subsection/tr-10-release--03-promotion-rollback",
+          "parent_branch": "section/tr-10-release",
+          "order": 3,
+          "depends_on": [
+            "transportation-backend::tr-10-release::02-certification"
+          ],
+          "required_gates": [
+            "lint",
+            "unit",
+            "integration",
+            "contract",
+            "security",
+            "clean_tree",
+            "remote_sha_match",
+            "ci_exact_sha",
+            "review",
+            "regression"
+          ],
+          "worktree": "/srv/codestra/workstations/transportation-backend-/sections/tr-10-release/subsections/03-promotion-rollback/repo"
+        }
+      ]
+    }
+  ]
+}
