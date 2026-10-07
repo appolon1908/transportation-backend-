@@ -129,7 +129,7 @@ jobs:
           set -Eeuo pipefail
           python -c 'import os; from app.repository_identity import require_canonical_checkout; require_canonical_checkout(os.environ)'
           branch_tag="$(printf '%s' "$SOURCE_BRANCH" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g')"
-          image="ghcr.io/appolon1908-hue/freight-platform-backend:${branch_tag}-${SOURCE_SHA:0:12}"
+          image="ghcr.io/appolon1908/transportation-backend-:${branch_tag}-${SOURCE_SHA:0:12}"
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           docker build --pull=false --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" --label "org.opencontainers.image.revision=${SOURCE_SHA}" -f "$DOCKERFILE" -t "$image" "$(dirname "$DOCKERFILE")"
           docker push "$image" | tee "$RUNNER_TEMP/push.log"
