@@ -16,6 +16,7 @@ from app.api import router as core_router
 from app.api_extended import router as extended_router
 from app.config import get_settings
 from app.db import SessionLocal
+from app.documents.api import router as documents_router
 from app.openapi_contract import install_openapi_contract
 from app.operations.replay_api import router as operations_replay_router
 from app.platform.router import router as platform_router
@@ -35,6 +36,10 @@ _SUPERSEDED_EXTENDED_ROUTE_PATHS = {
     "/admin/capabilities/{code}",
     "/integrations/tracking/{provider}/webhooks",
     "/operations/dead-letters/{message_id}/replay",
+    "/documents/upload-sessions",
+    "/documents/{document_id}/confirm",
+    "/loads/{load_id}/documents",
+    "/loads/{load_id}/pod",
 }
 
 
@@ -193,6 +198,7 @@ async def health_version():
 
 
 # Persistent identity and command-backed recovery precede foundation routes.
+app.include_router(documents_router)
 app.include_router(platform_router)
 app.include_router(operations_replay_router)
 app.include_router(core_router)

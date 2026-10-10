@@ -41,6 +41,8 @@ def serialize_columns(item: object, allowed: Iterable[str] | None = None) -> dic
     allowed_set = set(allowed) if allowed is not None else None
     result: dict[str, Any] = {}
     for table_column in item.__table__.columns:  # type: ignore[attr-defined]
+        if isinstance(item, Document) and table_column.name == "object_key":
+            continue
         if allowed_set is None or table_column.name in allowed_set:
             result[table_column.name] = getattr(item, table_column.name)
     return result
@@ -312,6 +314,8 @@ async def documents_for_resources(
     else:
         return []
 
+    # Never offer pending, rejected or quarantined uploads as portal evidence.
+    statement = statement.where(Document.status.in_(["AVAILABLE", "ATTACHED"]))
     if has_column(Document, "created_at"):
         statement = statement.order_by(column(Document, "created_at").desc())
     else:

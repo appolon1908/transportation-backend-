@@ -100,7 +100,7 @@ jobs:
         run: python -m app.schema_upgrade
 
       - name: Assert canonical core migration head
-        run: test "$(alembic heads | awk '{print $1}')" = "0006_identity_rbac_rls"
+        run: test "$(alembic heads | awk '{print $1}')" = "0008_document_verification_lease"
 
       - name: Apply carrier compliance schema and database triggers
         run: alembic -c alembic-compliance.ini upgrade head
@@ -223,7 +223,7 @@ jobs:
           printf '%s' 'ci-compliance-pepper-not-for-production' > /tmp/freight-gateway/compliance-pepper
 
           export APP_VERSION=0.6.0
-          export MIGRATION_HEAD=0006_identity_rbac_rls
+          export MIGRATION_HEAD=0008_document_verification_lease
           export FREIGHT_BACKEND_IMAGE=ghcr.io/example/freight-platform-backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
           export FREIGHT_BACKEND_NETWORK=freight_private
           export MIGRATOR_DATABASE_URL=postgresql+asyncpg://freight_migrator:ci@database.invalid/freight
